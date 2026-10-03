@@ -33,10 +33,19 @@ jobs:
           path: ~/.cache/solana
           key: solana-platform-tools-${{ runner.os }}-v1
 
+      # Pinned to the exact Agave release this program is developed and
+      # tested against locally (see the version `cargo-build-sbf --version`
+      # prints), rather than trusting release.anza.xyz/stable to resolve to
+      # the same thing — it doesn't: that channel produced a build whose
+      # .so litesvm's loader rejected with InvalidAccountData.
       - name: Install the Solana CLI (provides cargo-build-sbf)
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+          curl -sSfL -o solana-release.tar.bz2 \
+            https://github.com/anza-xyz/agave/releases/download/v4.3.0/solana-release-x86_64-unknown-linux-gnu.tar.bz2
+          mkdir -p "$HOME/.local/share/solana-manual"
+          tar -xjf solana-release.tar.bz2 -C "$HOME/.local/share/solana-manual"
+          rm solana-release.tar.bz2
+          echo "$HOME/.local/share/solana-manual/solana-release/bin" >> "$GITHUB_PATH"
 
       # Scoped to the program's own manifest: a bare `cargo-build-sbf` from
       # the workspace root also tries to build tests-e2e (litesvm and
