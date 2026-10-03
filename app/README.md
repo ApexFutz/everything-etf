@@ -54,5 +54,3 @@ prints the `.env.local` values to use.
 - **One keypair plays every admin role** in the initialize script (upgrade authority,
   protocol treasury, $EETF genesis owner, dev treasury) — fine for trying things out,
   not how you'd actually want a real deployment split.
-- **No basket listing pagination** — `listBaskets` fetches every `Basket` account in one
-  `getProgramAccounts` call, which won't scale indefinitely.

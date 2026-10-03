@@ -3,34 +3,39 @@
 import { useConnection } from "@solana/wallet-adapter-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { BasketWithKey, fetchCoinConfig, fetchConfig, listBaskets } from "@/lib/etf/client";
+import { BasketWithKey, fetchCoinConfig, fetchConfig, listBasketsPage } from "@/lib/etf/client";
 import { Config, CoinConfig } from "@/lib/etf/accounts";
 import { COIN_DECIMALS, COIN_TOTAL_SUPPLY } from "@/lib/etf/constants";
 import { formatBaseUnits, formatBps } from "@/lib/format";
-import { AddressLink, Banner, Card, Stat } from "@/components/ui";
+import { AddressLink, Banner, Button, Card, Stat } from "@/components/ui";
+
+const PAGE_SIZE = 10;
 
 export default function Home() {
   const { connection } = useConnection();
   const [config, setConfig] = useState<Config | null>(null);
   const [coinConfig, setCoinConfig] = useState<CoinConfig | null>(null);
   const [baskets, setBaskets] = useState<BasketWithKey[]>([]);
+  const [nextBefore, setNextBefore] = useState<bigint | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       try {
-        const [cfg, coin, bskts] = await Promise.all([
+        const [cfg, coin, page] = await Promise.all([
           fetchConfig(connection),
           fetchCoinConfig(connection),
-          listBaskets(connection),
+          listBasketsPage(connection, { pageSize: PAGE_SIZE }),
         ]);
         if (cancelled) return;
         setConfig(cfg);
         setCoinConfig(coin);
-        setBaskets(bskts);
+        setBaskets(page.baskets);
+        setNextBefore(page.nextBefore);
         setError(null);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -43,6 +48,20 @@ export default function Home() {
       cancelled = true;
     };
   }, [connection]);
+
+  async function loadMore() {
+    if (nextBefore === null) return;
+    setLoadingMore(true);
+    try {
+      const page = await listBasketsPage(connection, { before: nextBefore, pageSize: PAGE_SIZE });
+      setBaskets((prev) => [...prev, ...page.baskets]);
+      setNextBefore(page.nextBefore);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   if (loading) return <p className="text-sm text-zinc-500">Loading protocol state…</p>;
 
@@ -103,7 +122,7 @@ export default function Home() {
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-            Baskets ({baskets.length})
+            Baskets ({baskets.length} of {config.basketCount.toString()})
           </h2>
           <Link href="/baskets/new" className="text-sm underline">
             + Create a basket
@@ -133,6 +152,13 @@ export default function Home() {
                 </Card>
               </Link>
             ))}
+          </div>
+        )}
+        {nextBefore !== null && (
+          <div className="mt-4">
+            <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
           </div>
         )}
       </section>

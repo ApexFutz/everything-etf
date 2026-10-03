@@ -11,7 +11,6 @@ import {
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { Basket, Config, CoinConfig, decodeBasket, decodeConfig, decodeCoinConfig } from "./accounts";
-import { ACCOUNT_DISCRIMINATORS } from "./discriminators";
 import * as ix from "./instructions";
 import {
   basketMintPda,
@@ -22,7 +21,6 @@ import {
   configPda,
   feeEscrowAta,
 } from "./pda";
-import { PROGRAM_ID } from "./constants";
 
 // ---------------------------------------------------------------------------
 // reads
@@ -42,14 +40,52 @@ export interface BasketWithKey extends Basket {
   pubkey: PublicKey;
 }
 
-/** Every basket the program has ever created, newest first. */
-export async function listBaskets(connection: Connection): Promise<BasketWithKey[]> {
-  const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-    filters: [{ memcmp: { offset: 0, bytes: bs58(ACCOUNT_DISCRIMINATORS.Basket) } }],
-  });
-  const baskets = accounts.map((a) => ({ pubkey: a.pubkey, ...decodeBasket(a.account.data) }));
-  baskets.sort((a, b) => Number(b.id - a.id));
-  return baskets;
+export interface BasketPage {
+  baskets: BasketWithKey[];
+  /** Pass as `before` to fetch the next (older) page; null once exhausted. */
+  nextBefore: bigint | null;
+}
+
+/**
+ * One page of baskets, newest first, `pageSize` at a time. Rather than one
+ * `getProgramAccounts` scanning every Basket account on the program (which
+ * won't scale — large/slow responses, and most RPC providers cap or heavily
+ * rate-limit that call), basket ids are sequential (0..config.basketCount),
+ * so this derives each page's PDAs directly and fetches them in one batched
+ * `getMultipleAccountsInfo` call.
+ *
+ * Pass `before` (from a previous page's `nextBefore`) to continue older;
+ * omit it to start from the newest basket.
+ */
+export async function listBasketsPage(
+  connection: Connection,
+  opts: { before?: bigint; pageSize?: number } = {},
+): Promise<BasketPage> {
+  const pageSize = opts.pageSize ?? 10;
+  const config = await fetchConfig(connection);
+  if (!config || config.basketCount === 0n) {
+    return { baskets: [], nextBefore: null };
+  }
+
+  const highestId = opts.before !== undefined ? opts.before - 1n : config.basketCount - 1n;
+  if (highestId < 0n) {
+    return { baskets: [], nextBefore: null };
+  }
+
+  const ids: bigint[] = [];
+  for (let id = highestId; id >= 0n && ids.length < pageSize; id--) {
+    ids.push(id);
+  }
+
+  const pubkeys = ids.map((id) => basketPda(id)[0]);
+  const infos = await connection.getMultipleAccountsInfo(pubkeys);
+  const baskets = infos
+    .map((info, i) => (info ? { pubkey: pubkeys[i], ...decodeBasket(info.data) } : null))
+    .filter((b): b is BasketWithKey => b !== null);
+
+  const lastFetchedId = ids[ids.length - 1];
+  const nextBefore = lastFetchedId > 0n ? lastFetchedId : null;
+  return { baskets, nextBefore };
 }
 
 export async function fetchBasketById(
@@ -70,38 +106,6 @@ export async function fetchVaultBalances(
   const vaults = assets.map((m) => getAssociatedTokenAddressSync(m, basket, true));
   const accounts = await Promise.all(vaults.map((v) => getAccount(connection, v)));
   return accounts.map((a) => a.amount);
-}
-
-function bs58(bytes: readonly number[]): string {
-  // base58-encode a short byte array for the memcmp filter; avoids pulling
-  // in a base58 dependency just for this.
-  const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let i = 0; i < digits.length; i++) {
-      carry += digits[i] << 8;
-      digits[i] = carry % 58;
-      carry = (carry / 58) | 0;
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = (carry / 58) | 0;
-    }
-  }
-  // leading zero bytes -> leading '1's
-  let leadingZeros = 0;
-  for (const byte of bytes) {
-    if (byte === 0) leadingZeros++;
-    else break;
-  }
-  return (
-    ALPHABET[0].repeat(leadingZeros) +
-    digits
-      .reverse()
-      .map((d) => ALPHABET[d])
-      .join("")
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -434,5 +438,3 @@ export function lowerFeesTx(args: {
 export function accrueFeesTx(args: { basket: PublicKey; basketMint: PublicKey; feeEscrow: PublicKey }) {
   return [ix.accrueFees(args)];
 }
-
-export { PROGRAM_ID };
