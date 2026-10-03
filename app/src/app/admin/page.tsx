@@ -7,6 +7,7 @@ import {
   crankBurnTx,
   fetchCoinConfig,
   fetchConfig,
+  fetchUpgradeAuthority,
   initializeCoinTx,
   initializeConfigTx,
   updateCoinTermsTx,
@@ -26,11 +27,17 @@ export default function AdminPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [coinConfig, setCoinConfig] = useState<CoinConfig | null>(null);
   const [burnVaultBalance, setBurnVaultBalance] = useState<bigint | null>(null);
+  const [upgradeAuthority, setUpgradeAuthority] = useState<PublicKey | null | undefined>(undefined);
 
   const refresh = useCallback(async () => {
-    const [cfg, coin] = await Promise.all([fetchConfig(connection), fetchCoinConfig(connection)]);
+    const [cfg, coin, upgrade] = await Promise.all([
+      fetchConfig(connection),
+      fetchCoinConfig(connection),
+      fetchUpgradeAuthority(connection),
+    ]);
     setConfig(cfg);
     setCoinConfig(coin);
+    setUpgradeAuthority(upgrade);
     if (coin) {
       const info = await connection.getAccountInfo(coin.burnVault);
       // Raw SPL token account layout: amount is a u64 at byte offset 64.
@@ -52,6 +59,30 @@ export default function AdminPage() {
   return (
     <div className="max-w-xl space-y-6">
       <h1 className="text-xl font-semibold">Admin</h1>
+
+      <Card>
+        <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          Program upgrade authority
+        </h2>
+        <p className="text-sm">
+          {upgradeAuthority === undefined ? (
+            <span className="text-zinc-500">No program deployed at this address.</span>
+          ) : upgradeAuthority === null ? (
+            <span>
+              <strong>Immutable</strong> — the upgrade authority has been revoked, so the deployed
+              rules can never be changed.
+            </span>
+          ) : (
+            <AddressLink address={upgradeAuthority.toBase58()} chars={8} />
+          )}
+        </p>
+        {upgradeAuthority && (
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            Whoever holds this key can replace the program, and with it every rule below — fee caps
+            included. Check it before trusting any basket on this deployment.
+          </p>
+        )}
+      </Card>
 
       {error && <Banner kind="error">{error}</Banner>}
       {signature && (

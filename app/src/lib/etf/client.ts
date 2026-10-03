@@ -21,6 +21,7 @@ import {
   configPda,
   feeEscrowAta,
 } from "./pda";
+import { PROGRAM_ID } from "./constants";
 
 // ---------------------------------------------------------------------------
 // reads
@@ -106,6 +107,33 @@ export async function fetchVaultBalances(
   const vaults = assets.map((m) => getAssociatedTokenAddressSync(m, basket, true));
   const accounts = await Promise.all(vaults.map((v) => getAccount(connection, v)));
   return accounts.map((a) => a.amount);
+}
+
+const BPF_LOADER_UPGRADEABLE_ID = new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111");
+
+/**
+ * Who can upgrade (or close) this program — the single most consequential
+ * key in the whole system, since it can replace every rule the program
+ * enforces. Worth showing people rather than making them go dig for it.
+ *
+ * Returns null if the program is immutable (authority revoked), or
+ * undefined if there's no program deployed at this address at all.
+ *
+ * Reads the loader-v3 ProgramData account directly: bincode layout is a u32
+ * variant tag, a u64 slot, then an Option<Pubkey> whose tag byte sits at
+ * offset 12.
+ */
+export async function fetchUpgradeAuthority(
+  connection: Connection,
+): Promise<PublicKey | null | undefined> {
+  const [programData] = PublicKey.findProgramAddressSync(
+    [PROGRAM_ID.toBuffer()],
+    BPF_LOADER_UPGRADEABLE_ID,
+  );
+  const info = await connection.getAccountInfo(programData);
+  if (!info) return undefined;
+  const isSome = info.data[12] === 1;
+  return isSome ? new PublicKey(info.data.subarray(13, 45)) : null;
 }
 
 // ---------------------------------------------------------------------------
