@@ -29,6 +29,13 @@ pub fn split_claim(total: u64) -> Result<(u64, u64)> {
     Ok((token_leg, total - token_leg))
 }
 
+/// Splits a basket-creation fee into (burned, development). The dev treasury
+/// gets the rounding remainder; the burn leg is what the floor protects.
+pub fn split_creation_fee(fee: u64, burn_bps: u16) -> Result<(u64, u64)> {
+    let burned = bps_of(fee, burn_bps as u64)?;
+    Ok((burned, fee - burned))
+}
+
 /// Underlying amount a minter must deposit for `amount` basket tokens. Rounds up.
 pub fn deposit_for_mint(vault_balance: u64, amount: u64, supply: u64) -> Result<u64> {
     require!(supply > 0, EtfError::NotSeeded);
@@ -65,6 +72,7 @@ pub fn streaming_fee_tokens(supply: u64, annual_bps: u16, elapsed_seconds: u64) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::{COIN_TOTAL_SUPPLY, MAX_CREATION_FEE_COIN, MIN_CREATION_BURN_BPS};
 
     #[test]
     fn fee_split_protocol_ten_percent() {
@@ -97,6 +105,36 @@ mod tests {
         let (p, m) = split_fee(fee, 1_000).unwrap();
         assert_eq!(split_claim(p).unwrap(), (25_000, 75_000));
         assert_eq!(split_claim(m).unwrap(), (225_000, 675_000));
+    }
+
+    #[test]
+    fn creation_fee_splits_burn_and_dev() {
+        let (burn, dev) = split_creation_fee(1_000_000, 7_000).unwrap();
+        assert_eq!(burn, 700_000);
+        assert_eq!(dev, 300_000);
+    }
+
+    #[test]
+    fn creation_fee_split_is_exhaustive() {
+        for fee in [0u64, 1, 3, 7, 999_999, u64::MAX] {
+            for bps in [MIN_CREATION_BURN_BPS, 6_666, 10_000] {
+                let (burn, dev) = split_creation_fee(fee, bps).unwrap();
+                assert_eq!(burn.checked_add(dev), Some(fee), "fee {fee} bps {bps}");
+            }
+        }
+    }
+
+    #[test]
+    fn creation_fee_floor_always_burns_at_least_half() {
+        let fee = 1_000_000_000;
+        let (burn, _) = split_creation_fee(fee, MIN_CREATION_BURN_BPS).unwrap();
+        assert!(burn >= fee / 2);
+    }
+
+    #[test]
+    fn genesis_supply_fits_in_u64() {
+        assert!(COIN_TOTAL_SUPPLY < u64::MAX);
+        assert!(MAX_CREATION_FEE_COIN < COIN_TOTAL_SUPPLY);
     }
 
     #[test]

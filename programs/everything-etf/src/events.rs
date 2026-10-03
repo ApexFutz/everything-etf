@@ -100,3 +100,46 @@ pub struct FeesLowered {
     pub streaming_fee_bps: u16,
     pub timestamp: i64,
 }
+
+#[event]
+pub struct CoinInitialized {
+    pub mint: Pubkey,
+    pub genesis_account: Pubkey,
+    pub total_supply: u64,
+    pub dev_treasury: Pubkey,
+    pub burn_vault: Pubkey,
+    pub creation_fee_coin: u64,
+    pub creation_burn_bps: u16,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct CoinTermsUpdated {
+    pub dev_treasury: Pubkey,
+    pub creation_fee_coin: u64,
+    pub creation_burn_bps: u16,
+    pub timestamp: i64,
+}
+
+/// Emitted by `create_basket` once the coin is live. `burned` has already left
+/// the supply for good by the time this is logged.
+#[event]
+pub struct CreationFeePaid {
+    pub basket: Pubkey,
+    pub manager: Pubkey,
+    pub fee: u64,
+    pub burned: u64,
+    pub to_dev: u64,
+    pub supply_after: u64,
+    pub total_burned: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct CoinBurned {
+    pub cranker: Pubkey,
+    pub amount: u64,
+    pub supply_after: u64,
+    pub total_burned: u64,
+    pub timestamp: i64,
+}

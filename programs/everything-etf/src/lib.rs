@@ -1,6 +1,6 @@
 //! Everything ETF — launchpad for equal-weight, on-chain basket tokens.
 //!
-//! v0.1 (this program): baskets, in-kind mint/redeem, fees, events.
+//! v0.1 (this program): the $EETF coin, baskets, in-kind mint/redeem, fees, events.
 //! See README.md for the full roadmap.
 
 use anchor_lang::prelude::*;
@@ -42,7 +42,31 @@ pub mod everything_etf {
         instructions::update_protocol_terms::handler(ctx, treasury, creation_fee_lamports, protocol_share_bps)
     }
 
-    /// Launch a new basket. Charges the creation fee.
+    /// Mint $EETF: whole fixed supply at once, then the mint authority is
+    /// revoked in the same instruction. Callable exactly once.
+    pub fn initialize_coin(
+        ctx: Context<InitializeCoin>,
+        params: InitializeCoinParams,
+    ) -> Result<()> {
+        instructions::initialize_coin::handler(ctx, params)
+    }
+
+    /// Reprice basket creation / repoint the dev treasury, within hard caps.
+    pub fn update_coin_terms(
+        ctx: Context<UpdateCoinTerms>,
+        dev_treasury: Pubkey,
+        creation_fee_coin: u64,
+        creation_burn_bps: u16,
+    ) -> Result<()> {
+        instructions::update_coin_terms::handler(ctx, dev_treasury, creation_fee_coin, creation_burn_bps)
+    }
+
+    /// Permissionlessly burn everything sitting in the $EETF burn vault.
+    pub fn crank_burn(ctx: Context<CrankBurn>) -> Result<()> {
+        instructions::crank_burn::handler(ctx)
+    }
+
+    /// Launch a new basket. Burns the $EETF creation fee and pays the dev share.
     pub fn create_basket<'info>(
         ctx: Context<'_, '_, 'info, 'info, CreateBasket<'info>>,
         params: CreateBasketParams,

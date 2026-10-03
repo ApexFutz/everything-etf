@@ -44,6 +44,14 @@ pub enum EtfError {
     NothingToClaim,
     #[msg("Signer is not allowed to perform this action")]
     Unauthorized,
+    #[msg("Burn share of the creation fee is below the protocol floor")]
+    BurnShareBelowFloor,
+    #[msg("Creation fee exceeds the protocol hard cap")]
+    CreationFeeAboveCap,
+    #[msg("Burn vault is empty")]
+    NothingToBurn,
+    #[msg("Coin mint authority was not revoked")]
+    MintAuthorityNotRevoked,
     #[msg("Arithmetic overflow")]
     MathOverflow,
 }

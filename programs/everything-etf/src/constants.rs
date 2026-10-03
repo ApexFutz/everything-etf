@@ -33,3 +33,26 @@ pub const MAX_URI_LEN: usize = 200;
 pub const CONFIG_SEED: &[u8] = b"config";
 pub const BASKET_SEED: &[u8] = b"basket";
 pub const BASKET_MINT_SEED: &[u8] = b"basket_mint";
+
+// ---------------------------------------------------------------------------
+// $EETF — the protocol coin
+// ---------------------------------------------------------------------------
+
+/// Coin decimals (same as basket tokens).
+pub const COIN_DECIMALS: u8 = 9;
+
+/// Fixed supply: 1,000,000,000 EETF. Minted once in `initialize_coin`, which
+/// then revokes the mint authority forever. Supply can only ever go down.
+pub const COIN_TOTAL_SUPPLY: u64 = 1_000_000_000 * 1_000_000_000;
+
+/// Floor on the burned share of every basket-creation fee. The protocol
+/// authority can raise the burn share but never push it below this.
+pub const MIN_CREATION_BURN_BPS: u16 = 5_000; // 50%
+
+/// Ceiling on the basket-creation fee, so the authority can never price new
+/// managers out: 1% of the genesis supply.
+pub const MAX_CREATION_FEE_COIN: u64 = 10_000_000 * 1_000_000_000;
+
+/// Coin PDA seeds.
+pub const COIN_SEED: &[u8] = b"coin";
+pub const COIN_MINT_SEED: &[u8] = b"coin_mint";

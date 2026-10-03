@@ -51,3 +51,30 @@ pub enum FeeRecipient {
     Manager,
     Protocol,
 }
+
+/// $EETF coin settings. One per deployment, created by `initialize_coin`.
+///
+/// This PDA is the coin mint's authority at genesis and the owner of the burn
+/// vault. The mint authority is revoked inside `initialize_coin`, so after that
+/// transaction the PDA can only ever *burn* coins, never create them.
+#[account]
+#[derive(InitSpace)]
+pub struct CoinConfig {
+    /// The $EETF mint. Fixed supply, mint authority permanently None.
+    pub mint: Pubkey,
+    /// Wallet whose coin account receives the development share of creation fees.
+    pub dev_treasury: Pubkey,
+    /// Coin account owned by this PDA. Anything sent here can be burned by
+    /// anyone via `crank_burn`; nothing can take coins back out.
+    pub burn_vault: Pubkey,
+    /// Fee, in $EETF base units, charged to create a basket.
+    pub creation_fee_coin: u64,
+    /// Share of each creation fee that is burned. The rest goes to dev_treasury.
+    pub creation_burn_bps: u16,
+    /// Lifetime totals, for the public tokenomics page.
+    pub total_burned: u64,
+    pub total_dev_fees: u64,
+    pub baskets_funded: u64,
+    pub bump: u8,
+    pub mint_bump: u8,
+}

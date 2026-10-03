@@ -5,13 +5,14 @@ use anchor_spl::metadata::{
     create_metadata_accounts_v3, mpl_token_metadata::types::DataV2, CreateMetadataAccountsV3,
     Metadata,
 };
-use anchor_spl::token::{Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Burn, Mint, Token, TokenAccount, Transfer};
 use anchor_spl::token_2022::Token2022;
 
 use crate::constants::*;
 use crate::errors::EtfError;
-use crate::events::BasketCreated;
-use crate::state::{Basket, Config};
+use crate::events::{BasketCreated, CreationFeePaid};
+use crate::math;
+use crate::state::{Basket, CoinConfig, Config};
 use crate::utils::{token_program_for, validate_asset_mint};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
@@ -28,6 +29,10 @@ pub struct CreateBasketParams {
 
 /// Creates a basket: state account, basket token mint + metadata, fee escrow,
 /// and one vault (ATA owned by the basket PDA) per underlying asset.
+///
+/// Charges the manager the $EETF creation fee: `creation_burn_bps` of it is
+/// burned on the spot and the remainder goes to the dev treasury. Every basket
+/// that has ever been launched is therefore a permanent cut in $EETF supply.
 ///
 /// Remaining accounts: `[asset_mint, asset_vault]` per asset, in order.
 #[derive(Accounts)]
@@ -70,6 +75,24 @@ pub struct CreateBasket<'info> {
         associated_token::token_program = token_program,
     )]
     pub fee_escrow: Box<Account<'info, TokenAccount>>,
+
+    #[account(mut, seeds = [COIN_SEED], bump = coin_config.bump)]
+    pub coin_config: Box<Account<'info, CoinConfig>>,
+
+    #[account(mut, address = coin_config.mint)]
+    pub coin_mint: Box<Account<'info, Mint>>,
+
+    /// Manager's $EETF account; the creation fee is taken from here.
+    #[account(mut, token::mint = coin_mint, token::authority = manager)]
+    pub manager_coin_account: Box<Account<'info, TokenAccount>>,
+
+    /// Dev treasury's $EETF account; receives the development share.
+    #[account(
+        mut,
+        token::mint = coin_mint,
+        token::authority = coin_config.dev_treasury,
+    )]
+    pub dev_coin_account: Box<Account<'info, TokenAccount>>,
 
     /// CHECK: Metaplex metadata PDA for basket_mint; created by the CPI below.
     #[account(
@@ -134,9 +157,8 @@ pub fn handler<'info>(
         assets.push(mint.key());
     }
 
-    // Creation fee -> protocol treasury.
-    let config = &mut ctx.accounts.config;
-    let creation_fee = config.creation_fee_lamports;
+    // SOL creation fee -> protocol treasury (0 once the $EETF fee is live).
+    let creation_fee = ctx.accounts.config.creation_fee_lamports;
     if creation_fee > 0 {
         system_program::transfer(
             CpiContext::new(
@@ -150,7 +172,67 @@ pub fn handler<'info>(
         )?;
     }
 
+    // $EETF creation fee: burn leg first, then the development leg. Both are
+    // signed by the manager, so nothing can be taken from anyone else.
+    let coin_fee = ctx.accounts.coin_config.creation_fee_coin;
+    let (burned, to_dev) =
+        math::split_creation_fee(coin_fee, ctx.accounts.coin_config.creation_burn_bps)?;
+    if burned > 0 {
+        token::burn(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Burn {
+                    mint: ctx.accounts.coin_mint.to_account_info(),
+                    from: ctx.accounts.manager_coin_account.to_account_info(),
+                    authority: ctx.accounts.manager.to_account_info(),
+                },
+            ),
+            burned,
+        )?;
+    }
+    if to_dev > 0 {
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.manager_coin_account.to_account_info(),
+                    to: ctx.accounts.dev_coin_account.to_account_info(),
+                    authority: ctx.accounts.manager.to_account_info(),
+                },
+            ),
+            to_dev,
+        )?;
+    }
+    ctx.accounts.coin_mint.reload()?;
+
+    let coin_config = &mut ctx.accounts.coin_config;
+    coin_config.total_burned = coin_config
+        .total_burned
+        .checked_add(burned)
+        .ok_or(EtfError::MathOverflow)?;
+    coin_config.total_dev_fees = coin_config
+        .total_dev_fees
+        .checked_add(to_dev)
+        .ok_or(EtfError::MathOverflow)?;
+    coin_config.baskets_funded = coin_config
+        .baskets_funded
+        .checked_add(1)
+        .ok_or(EtfError::MathOverflow)?;
+    let total_burned = coin_config.total_burned;
+
     let now = Clock::get()?.unix_timestamp;
+    emit!(CreationFeePaid {
+        basket: basket_key,
+        manager: ctx.accounts.manager.key(),
+        fee: coin_fee,
+        burned,
+        to_dev,
+        supply_after: ctx.accounts.coin_mint.supply,
+        total_burned,
+        timestamp: now,
+    });
+
+    let config = &mut ctx.accounts.config;
     let id = config.basket_count;
     let protocol_share_bps = config.protocol_share_bps;
     config.basket_count = id.checked_add(1).ok_or(EtfError::MathOverflow)?;

@@ -5,11 +5,86 @@ a basket (e.g. a "Frog" basket of frog-themed memecoins), and the basket token c
 bought anywhere Solana tokens trade, including the pump.fun and fomo UIs. A bridged
 copy is planned for Robinhood Chain, where it will trade on Ramses.
 
-> **Status: v0.1, pre-audit, not deployed.** Compiles for the Solana runtime and the
-> fee/share math is unit-tested. It has **not** had integration tests on a validator or
-> a security audit. Do not put real funds in it yet.
+> **Status: v0.1, pre-audit, not deployed.** The fee/share math is unit-tested. It has **not** had integration tests on a validator or
+> a security audit, and the $EETF coin instructions have not yet been built with
+> `anchor build` — run it before you trust anything here. Do not put real funds
+> in it yet.
 
 ---
+
+## $EETF — the protocol coin
+
+One coin for the whole launchpad. It has no inflation schedule, no staking
+emissions and no rebase: the **only** supply event after genesis is a burn, and
+the thing that drives burns is people launching baskets.
+
+### Supply
+
+| | |
+|---|---|
+| Genesis supply | 1,000,000,000 EETF (9 decimals) |
+| Minted | once, inside `initialize_coin` |
+| Mint authority after that | **None** — revoked in the same transaction, and the instruction re-reads the mint and fails if it isn't |
+| Metadata | created with `is_mutable = false`; name, symbol and URI are frozen forever |
+
+`initialize_coin` sends 100% of the supply to a single `genesis_owner` account.
+Splitting that into liquidity, community and dev allocations happens off-chain
+from that wallet — the program takes no position on it, so publish the
+allocation and the destination wallets before you run the instruction.
+
+### Where the coin is used
+
+**Launching a basket costs $EETF.** `create_basket` takes `creation_fee_coin`
+from the manager and splits it in one transaction:
+
+- `creation_burn_bps` of it is **burned** — gone from supply, permanently
+- the remainder goes to the **dev treasury**, which funds the build
+
+Default suggestion: 250,000 EETF per basket, 70% burned / 30% dev. Both knobs
+move with `update_coin_terms`, both are bounded by hardcoded limits the
+authority cannot cross:
+
+| Limit | Value | What it protects |
+|---|---|---|
+| `MIN_CREATION_BURN_BPS` | 50% | The burn can never be switched off or shrunk below half the fee |
+| `MAX_CREATION_FEE_COIN` | 1% of genesis supply | New managers can never be priced out |
+
+So the launchpad working *is* the tokenomics: every basket anyone creates
+retires coin supply and pays for development, in the same instruction, with no
+discretionary step in between.
+
+### The burn vault
+
+`CoinConfig.burn_vault` is a token account owned by the coin PDA. Anyone can
+send $EETF into it with an ordinary transfer, and the only instruction that can
+ever move those coins again is `crank_burn`, which burns the entire balance and
+is **permissionless** — anyone can call it, and the only possible outcome is a
+smaller supply. Nothing in the program can withdraw from it.
+
+That is the hook for protocol revenue: the 10% protocol share of basket fees
+arrives as basket tokens and underlyings, and once step 2 routes payouts
+through Jupiter, the treasury can swap that revenue to $EETF, send it to the
+burn vault, and let anyone crank it. Until then the vault is live but only
+holds what people voluntarily send it. **The swap-and-send step is off-chain
+and discretionary — it is a policy, not a guarantee the program enforces.**
+
+`CoinConfig` keeps running totals (`total_burned`, `total_dev_fees`,
+`baskets_funded`) and every burn emits an event, so circulating supply and
+lifetime burn are both verifiable without trusting a dashboard.
+
+### What the coin deliberately is not
+
+It does not entitle holders to fees, it is not required to hold or trade a
+basket token, and it does not vote on anything. Adding a revenue share or
+governance means a securities question that a lawyer should answer first — the
+roadmap items below are written on that assumption.
+
+### Deployment order
+
+`initialize_config` → `initialize_coin` → distribute from the genesis wallet →
+baskets. `create_basket` reads the coin config, so no basket can be created
+before the coin exists. Set `creation_fee_lamports` to 0 once the $EETF fee is
+live, unless you want to keep a small SOL charge as a spam deterrent.
 
 ## How a basket works
 
@@ -26,7 +101,8 @@ copy is planned for Robinhood Chain, where it will trade on Ramses.
 
 | Item | Value |
 |---|---|
-| Creation fee | 0.25 SOL to the protocol treasury |
+| Creation fee | `creation_fee_coin` in $EETF — burned / dev split, see above |
+| Legacy SOL creation fee | `creation_fee_lamports`, set to 0 once the coin is live |
 | Mint / redeem fee | set per basket, hard cap 1% each |
 | Streaming (management) fee | set per basket, hard cap 3% / year |
 | Protocol share of all fees | 10% (locked onto each basket at creation, hard cap 30%) |
@@ -66,8 +142,11 @@ Raising fees (within caps) will go through a timelock in step 6.
 | Instruction | Who | Remaining accounts (per asset, in basket order) |
 |---|---|---|
 | `initialize_config` | program upgrade authority, once | – |
+| `initialize_coin` | protocol authority, once | – |
+| `update_coin_terms` | protocol authority | – |
+| `crank_burn` | anyone | – |
 | `update_protocol_terms` | protocol authority (future baskets only) | – |
-| `create_basket` | anyone (becomes manager) | `[asset_mint, vault]` |
+| `create_basket` | anyone (becomes manager); costs $EETF | `[asset_mint, vault]` |
 | `seed_basket` | manager, when supply is 0 | `[asset_mint, vault, manager_ata]` |
 | `mint_basket` | anyone | `[asset_mint, vault, user_ata]` |
 | `redeem_basket` | anyone | `[asset_mint, vault, user_ata]` |
@@ -75,12 +154,19 @@ Raising fees (within caps) will go through a timelock in step 6.
 | `claim_fees` | manager or protocol authority | `[asset_mint, vault, payout_owner_ata]` |
 | `lower_fees` | manager | – |
 
+`create_basket` now also carries the coin accounts (`coin_config`, `coin_mint`,
+`manager_coin_account`, `dev_coin_account`) and two extra token CPIs. With a
+10-asset basket that is ~37 accounts and a lot of compute, so the client should
+prepend a `ComputeBudget` request rather than rely on the 200k default.
+
 `vault` is the associated token account of the **basket PDA** for that asset mint, under
 the asset's own token program (SPL Token or Token-2022).
 
 PDAs:
 
 - config: `["config"]`
+- coin config: `["coin"]`
+- coin mint: `["coin_mint"]`
 - basket: `["basket", basket_id (u64 LE)]`
 - basket mint: `["basket_mint", basket]`
 
@@ -108,14 +194,17 @@ If a dependency update breaks `anchor build` with an `edition2024` error, run
 
 ## Roadmap
 
-1. ✅ **v0.1:** baskets, in-kind mint/redeem, fees, events *(this release)*
+1. ✅ **v0.1:** $EETF, baskets, in-kind mint/redeem, fees, events *(this release)*
 2. Jupiter-routed SOL deposits/redemptions, plus a SOL cash leg in `claim_fees`
 3. Seed a Solana pool and confirm visibility in the pump.fun and fomo UIs
 4. LayerZero OFT Adapter on Solana and an OFT contract on Robinhood Chain
 5. Ramses pool on Robinhood Chain
 6. Oracle-priced rebalance crank to 1/N, probation/taper of underperformers,
    manager reserve and replacement proposals, timelocked changes
-7. Launchpad UI and basket pages (holdings, history, manager track record)
+7. Launchpad UI and basket pages (holdings, history, manager track record), plus a
+   public tokenomics page: circulating supply, lifetime burn, burn per basket
+8. Treasury policy for revenue → $EETF → burn vault, and (lawyer permitting) a
+   creation-fee discount for managers who lock $EETF
 
 ## Disclaimer
 
