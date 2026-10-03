@@ -16,7 +16,7 @@ pub mod utils;
 use instructions::*;
 use state::FeeRecipient;
 
-declare_id!("HVxbNmXpRw6RGZaQ4N9hZedeB8mN2DuWaDhRbqEL3YBv");
+declare_id!("9mT7xrj7xWiTPkH8pMQ8yzz8d8Fs9TacqyYQ61yPUzyq");
 
 #[program]
 pub mod everything_etf {

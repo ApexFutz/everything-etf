@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-everything_etf = "HVxbNmXpRw6RGZaQ4N9hZedeB8mN2DuWaDhRbqEL3YBv"
+everything_etf = "9mT7xrj7xWiTPkH8pMQ8yzz8d8Fs9TacqyYQ61yPUzyq"
 
 [programs.devnet]
-everything_etf = "HVxbNmXpRw6RGZaQ4N9hZedeB8mN2DuWaDhRbqEL3YBv"
+everything_etf = "9mT7xrj7xWiTPkH8pMQ8yzz8d8Fs9TacqyYQ61yPUzyq"
 
 [provider]
 cluster = "localnet"
