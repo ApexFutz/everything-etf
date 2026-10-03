@@ -23,6 +23,7 @@
  * about the app itself needs to know @solana/kit exists.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
@@ -44,11 +45,15 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const PROGRAM_SO = path.join(here, "..", "..", "target", "deploy", "everything_etf.so");
 const METADATA_FIXTURE = path.join(here, "..", "..", "tests-e2e", "fixtures", "mpl_token_metadata.so");
 
-// A throwaway program ID for this test only — doesn't need to match any
-// real deployment. declare_id! isn't checked against the invoking address
-// at runtime; Solana already enforces that a program only ever runs under
-// the address it was invoked at.
-const PROGRAM_ID = Keypair.generate().publicKey;
+// The program has to be loaded at exactly the address baked into it by
+// declare_id!: Anchor's generated entrypoint compares the invoking program
+// id against that constant and bails with DeclaredProgramIdMismatch (4100)
+// otherwise. Parsed from the Rust source rather than hardcoded so this
+// keeps working if the deployment address ever changes again.
+const LIB_RS = path.join(here, "..", "..", "programs", "everything-etf", "src", "lib.rs");
+const declaredId = readFileSync(LIB_RS, "utf-8").match(/declare_id!\("([^"]+)"\)/)?.[1];
+if (!declaredId) throw new Error(`could not parse declare_id! out of ${LIB_RS}`);
+const PROGRAM_ID = new PublicKey(declaredId);
 process.env.NEXT_PUBLIC_ETF_PROGRAM_ID = PROGRAM_ID.toBase58();
 
 const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
