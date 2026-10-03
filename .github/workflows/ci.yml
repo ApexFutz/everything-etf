@@ -50,7 +50,7 @@ jobs:
         run: cargo test --workspace --locked
 
   app:
-    name: Web app (lint, typecheck, build)
+    name: Web app (lint, build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -65,6 +65,8 @@ jobs:
           cache-dependency-path: app/package-lock.json
 
       - run: npm ci
-      - run: npx tsc --noEmit -p .
       - run: npx eslint src
+      # `next build` type-checks as part of its own pipeline (it generates
+      # route types like LayoutProps first, which a standalone `tsc --noEmit`
+      # can't see on a clean checkout) — no separate tsc step needed.
       - run: npm run build
