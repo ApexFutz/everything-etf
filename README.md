@@ -86,6 +86,19 @@ baskets. `create_basket` reads the coin config, so no basket can be created
 before the coin exists. Set `creation_fee_lamports` to 0 once the $EETF fee is
 live, unless you want to keep a small SOL charge as a spam deterrent.
 
+### Deploying to devnet
+
+```bash
+scripts/deploy-devnet.sh
+```
+
+Builds with `cargo-build-sbf` and deploys/upgrades the program on devnet. It refuses to run
+if `target/deploy/everything_etf-keypair.json`'s pubkey doesn't match `declare_id!` — which is
+expected on any machine that doesn't have the real deploy keypair, since that keypair is a
+private key and is never committed (`target/` is gitignored). See the script's header comment
+for how to resolve that, and `--help` for all flags. It stops after the binary is live;
+`initialize_config`/`initialize_coin` above are separate, one-time admin calls.
+
 ## How a basket works
 
 1. A **manager** creates a basket from 2 to 10 existing SPL / Token-2022 coins.
@@ -203,7 +216,9 @@ Two layers:
   [litesvm](https://github.com/LiteSVM/litesvm), an in-process SVM, and drive full
   transactions against it: no `solana-test-validator` needed. `tests/lifecycle.rs` runs the
   whole protocol end to end (genesis → basket → seed → mint/redeem → streaming fees → claims →
-  lower fees).
+  lower fees); `tests/edge_cases.rs` covers every `require!`/constraint the program checks —
+  fee caps, asset-count bounds, duplicate/freezable assets, slippage, unauthorized claims, and
+  so on — asserting the exact `EtfError` each one returns.
 
 ```bash
 cargo-build-sbf                   # produces target/deploy/everything_etf.so
