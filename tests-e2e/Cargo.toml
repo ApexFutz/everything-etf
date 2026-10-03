@@ -1,0 +1,30 @@
+[package]
+name = "tests-e2e"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# End-to-end tests that execute the real SBF binary (target/deploy/everything_etf.so)
+# inside litesvm, an in-process SVM. No validator required.
+#
+# Note the two generations of Solana crates here on purpose: the program (via
+# anchor 0.31) is built against solana-* 2.x, while litesvm 0.12 runs on 3.x.
+# Instructions are therefore built with anchor's 2.x types and converted at the
+# boundary by `conv()` in src/lib.rs.
+[dependencies]
+everything-etf = { path = "../programs/everything-etf", features = ["no-entrypoint"] }
+anchor-lang = "0.31.1"
+anchor-spl = { version = "0.31.1", features = ["metadata"] }
+
+litesvm = "0.12"
+solana-account = "3.4"
+solana-address = "2.7"
+solana-clock = "3.2"
+solana-instruction = "3.5"
+solana-keypair = "3.1"
+solana-signer = "3.0"
+solana-transaction = "3.1"
+solana-transaction-error = "3.2"
+solana-instruction-error = "2.5"
+spl-associated-token-account = "6"
+solana-compute-budget = "3.1"

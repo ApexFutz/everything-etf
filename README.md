@@ -5,10 +5,10 @@ a basket (e.g. a "Frog" basket of frog-themed memecoins), and the basket token c
 bought anywhere Solana tokens trade, including the pump.fun and fomo UIs. A bridged
 copy is planned for Robinhood Chain, where it will trade on Ramses.
 
-> **Status: v0.1, pre-audit, not deployed.** The fee/share math is unit-tested. It has **not** had integration tests on a validator or
-> a security audit, and the $EETF coin instructions have not yet been built with
-> `anchor build` — run it before you trust anything here. Do not put real funds
-> in it yet.
+> **Status: v0.1, pre-audit, not deployed.** The fee/share math is unit-tested, and the whole
+> program builds and runs end-to-end against the real compiled binary (see
+> [Testing](#testing)) — but it has **not** had a security audit or a live run on devnet/mainnet.
+> Do not put real funds in it yet.
 
 ---
 
@@ -191,6 +191,29 @@ anchor keys sync                  # replace the placeholder program ID with your
 `Cargo.lock` is pinned to crates compatible with Solana platform-tools (Rust 1.79).
 If a dependency update breaks `anchor build` with an `edition2024` error, run
 `cargo update -p blake3 --precise 1.5.5`.
+
+### Testing
+
+Two layers:
+
+- **Unit tests** (`cargo test -p everything-etf`) — pure fee/share math, no accounts. 15 cases
+  in `programs/everything-etf/src/math.rs`.
+- **End-to-end tests** (`cargo test -p tests-e2e`) — load the real compiled program
+  (`target/deploy/everything_etf.so`, plus a mainnet dump of Metaplex token metadata) into
+  [litesvm](https://github.com/LiteSVM/litesvm), an in-process SVM, and drive full
+  transactions against it: no `solana-test-validator` needed. `tests/lifecycle.rs` runs the
+  whole protocol end to end (genesis → basket → seed → mint/redeem → streaming fees → claims →
+  lower fees).
+
+```bash
+cargo-build-sbf                   # produces target/deploy/everything_etf.so
+cargo test -p tests-e2e
+```
+
+On Windows without Visual Studio installed, `cargo-build-sbf` and some of `tests-e2e`'s
+dependencies need a linker/CRT configured manually (e.g. via `xwin` + `lld-link` from
+Solana's own platform-tools) through a machine-specific `.cargo/config.toml`, which is
+gitignored since it hardcodes local paths.
 
 ## Roadmap
 
