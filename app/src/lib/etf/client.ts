@@ -7,6 +7,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
   createAssociatedTokenAccountIdempotentInstruction,
+  getAccount,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { Basket, Config, CoinConfig, decodeBasket, decodeConfig, decodeCoinConfig } from "./accounts";
@@ -58,6 +59,17 @@ export async function fetchBasketById(
   const [pubkey] = basketPda(id);
   const info = await connection.getAccountInfo(pubkey);
   return info ? { pubkey, ...decodeBasket(info.data) } : null;
+}
+
+/** Each asset's current vault balance, in the basket's asset order. */
+export async function fetchVaultBalances(
+  connection: Connection,
+  basket: PublicKey,
+  assets: PublicKey[],
+): Promise<bigint[]> {
+  const vaults = assets.map((m) => getAssociatedTokenAddressSync(m, basket, true));
+  const accounts = await Promise.all(vaults.map((v) => getAccount(connection, v)));
+  return accounts.map((a) => a.amount);
 }
 
 function bs58(bytes: readonly number[]): string {

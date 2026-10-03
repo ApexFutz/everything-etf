@@ -10,11 +10,13 @@ import {
   claimFeesTx,
   fetchBasketById,
   fetchConfig,
+  fetchVaultBalances,
   lowerFeesTx,
   mintBasketTx,
   redeemBasketTx,
   seedBasketTx,
 } from "@/lib/etf/client";
+import { quoteMintDeposits, quoteRedeemPayouts } from "@/lib/etf/quote";
 import { FeeRecipient } from "@/lib/etf/instructions";
 import { Config } from "@/lib/etf/accounts";
 import { BASKET_DECIMALS } from "@/lib/etf/constants";
@@ -268,18 +270,57 @@ function MintRedeemForm({
   setError: (e: string | null) => void;
 }) {
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const [amount, setAmount] = useState("1");
+  const [slippagePct, setSlippagePct] = useState("1");
+  const [preview, setPreview] = useState<{ quoted: bigint[]; decimals: number[] } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+
+  async function quoteNow(amt: bigint, slippage: number) {
+    const [vaultBalances, decimals, supply] = await Promise.all([
+      fetchVaultBalances(connection, basket.pubkey, basket.assets),
+      Promise.all(basket.assets.map(async (a) => (await getMint(connection, a)).decimals)),
+      getMint(connection, basket.mint).then((m) => m.supply),
+    ]);
+    if (kind === "mint") {
+      const { quoted, maxAmountsIn } = quoteMintDeposits(vaultBalances, amt, supply, slippage);
+      return { quoted, bound: maxAmountsIn, decimals };
+    }
+    const { quoted, minAmountsOut } = quoteRedeemPayouts(
+      vaultBalances,
+      amt,
+      supply,
+      basket.redeemFeeBps,
+      slippage,
+    );
+    return { quoted, bound: minAmountsOut, decimals };
+  }
+
+  async function onPreview() {
+    setError(null);
+    setPreviewing(true);
+    try {
+      const amt = parseToBaseUnits(amount, BASKET_DECIMALS);
+      const { quoted, decimals } = await quoteNow(amt, Number(slippagePct) / 100);
+      setPreview({ quoted, decimals });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!publicKey) return setError("connect a wallet first");
     try {
       const amt = parseToBaseUnits(amount, BASKET_DECIMALS);
+      // Re-quote fresh right before sending rather than reusing a possibly
+      // stale preview — the slippage tolerance covers the gap between this
+      // quote and the transaction actually landing, not between this quote
+      // and an earlier one.
+      const { bound } = await quoteNow(amt, Number(slippagePct) / 100);
       if (kind === "mint") {
-        // We don't know each vault's live balance client-side without an extra
-        // round trip, so this sends the most permissive bound rather than a
-        // real quote — see the warning below.
-        const maxAmountsIn = basket.assets.map(() => 2n ** 63n);
         const ixs = mintBasketTx({
           user: publicKey,
           basket: basket.pubkey,
@@ -287,11 +328,10 @@ function MintRedeemForm({
           feeEscrow: basket.feeEscrow,
           assets: basket.assets,
           amount: amt,
-          maxAmountsIn,
+          maxAmountsIn: bound,
         });
         onDone(await send(ixs));
       } else {
-        const minAmountsOut = basket.assets.map(() => 0n);
         const ixs = redeemBasketTx({
           user: publicKey,
           basket: basket.pubkey,
@@ -299,7 +339,7 @@ function MintRedeemForm({
           feeEscrow: basket.feeEscrow,
           assets: basket.assets,
           amount: amt,
-          minAmountsOut,
+          minAmountsOut: bound,
         });
         onDone(await send(ixs));
       }
@@ -317,11 +357,25 @@ function MintRedeemForm({
         <Field label="Amount (basket tokens)">
           <TextInput value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
-        <Banner kind="info">
-          This demo sends the most permissive slippage bound (no real quote fetched first). Don&apos;t
-          wire this to mainnet funds without quoting each vault&apos;s live balance before building
-          max_amounts_in / min_amounts_out.
-        </Banner>
+        <Field
+          label="Slippage tolerance (%)"
+          hint="Applied on top of a live quote of each vault's current balance."
+        >
+          <TextInput value={slippagePct} onChange={(e) => setSlippagePct(e.target.value)} />
+        </Field>
+        <Button type="button" variant="secondary" disabled={previewing} onClick={onPreview}>
+          {previewing ? "Quoting…" : kind === "mint" ? "Preview required deposits" : "Preview payout"}
+        </Button>
+        {preview && (
+          <div className="space-y-1 rounded-lg border border-black/10 p-3 text-xs dark:border-white/10">
+            {basket.assets.map((a, i) => (
+              <div key={a.toBase58()} className="flex justify-between">
+                <span className="font-mono">{a.toBase58().slice(0, 8)}…</span>
+                <span>{formatBaseUnits(preview.quoted[i], preview.decimals[i])}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <Button type="submit" disabled={pending}>
           {pending ? "Sending…" : kind === "mint" ? "Mint" : "Redeem"}
         </Button>
