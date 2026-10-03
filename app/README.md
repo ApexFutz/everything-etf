@@ -25,7 +25,13 @@ decodes every account directly:
   ATA creation bundled in, etc.)
 
 Read any of these side-by-side with its Rust counterpart; that's how they're meant to be
-verified, since there's no IDL acting as a single source of truth to check against.
+verified, since there's no IDL acting as a single source of truth to check against — plus
+one automated check: `tests/program-consistency.mts` loads the real compiled program into
+[litesvm](https://github.com/LiteSVM/litesvm) (its JS bindings this time, not the Rust ones
+`tests-e2e` uses) and sends it transactions built by this TS layer, so a renamed account
+field or reordered instruction account fails loudly instead of drifting silently. Runs in CI
+(see the repo root's `.github/workflows/ci.yml`); litesvm's npm package only ships Linux/macOS
+prebuilt binaries, so it can't run on this project's Windows dev machine, only there.
 
 ## Setup
 

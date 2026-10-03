@@ -58,6 +58,13 @@ jobs:
       - name: cargo test --workspace
         run: cargo test --workspace --locked
 
+      # Handed to the consistency job below, which needs this exact binary.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: program-so
+          path: target/deploy
+          retention-days: 1
+
   app:
     name: Web app (lint, build)
     runs-on: ubuntu-latest
@@ -79,3 +86,28 @@ jobs:
       # route types like LayoutProps first, which a standalone `tsc --noEmit`
       # can't see on a clean checkout) — no separate tsc step needed.
       - run: npm run build
+
+  consistency:
+    name: TS/Rust consistency (app/src/lib/etf vs. the real program)
+    needs: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: program-so
+          path: target/deploy
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+        working-directory: app
+      # litesvm's npm package only ships Linux/macOS prebuilt binaries —
+      # this can't run on this project's local Windows dev machine, only here.
+      - run: npx tsx tests/program-consistency.mts
+        working-directory: app
