@@ -19,6 +19,8 @@ decodes every account directly:
 - `instructions.ts` — one builder per instruction, each a literal transcription of its
   `#[derive(Accounts)]` struct's field order and the handler's argument list
 - `accounts.ts` — decoders for `Config`/`Basket`/`CoinConfig`
+- `quote.ts` — mirrors `math.rs`'s `deposit_for_mint`/`payout_for_burn`/`bps_of` exactly,
+  for quoting real `max_amounts_in`/`min_amounts_out` before mint/redeem
 - `client.ts` — the above, assembled into ready-to-send transactions (PDA derivation,
   ATA creation bundled in, etc.)
 
@@ -49,11 +51,6 @@ prints the `.env.local` values to use.
 
 ## Known simplifications (demo-grade, not production-grade)
 
-- **Mint/redeem send the most permissive `max_amounts_in`/`min_amounts_out`**, not a real
-  quote of each vault's live balance — fine for a devnet demo, not for real funds. Fetch
-  each vault's balance and compute the actual expected deposit/payout
-  (see `math.rs::deposit_for_mint`/`payout_for_burn`) before using this against anything
-  that matters.
 - **One keypair plays every admin role** in the initialize script (upgrade authority,
   protocol treasury, $EETF genesis owner, dev treasury) — fine for trying things out,
   not how you'd actually want a real deployment split.
