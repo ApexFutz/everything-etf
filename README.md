@@ -5,10 +5,13 @@ a basket (e.g. a "Frog" basket of frog-themed memecoins), and the basket token c
 bought anywhere Solana tokens trade, including the pump.fun and fomo UIs. A bridged
 copy is planned for Robinhood Chain, where it will trade on Ramses.
 
-> **Status: v0.1, pre-audit, not deployed.** The fee/share math is unit-tested, and the whole
-> program builds and runs end-to-end against the real compiled binary (see
-> [Testing](#testing)) — but it has **not** had a security audit or a live run on devnet/mainnet.
-> Do not put real funds in it yet.
+> **Status: v0.1, pre-audit, live on devnet only.** The fee/share math is unit-tested, the
+> whole program runs end-to-end against the real compiled binary (see [Testing](#testing)),
+> and it's deployed and initialized on devnet at
+> [`9mT7xrj7xWiTPkH8pMQ8yzz8d8Fs9TacqyYQ61yPUzyq`](https://explorer.solana.com/address/9mT7xrj7xWiTPkH8pMQ8yzz8d8Fs9TacqyYQ61yPUzyq?cluster=devnet) —
+> but it has **not** had a security audit, and that devnet deployment's upgrade authority is a
+> single hot wallet (see [#4](https://github.com/ApexFutz/everything-etf/issues/4)). Do not put
+> real funds in it, and do not deploy to mainnet, until both of those are addressed.
 
 ---
 

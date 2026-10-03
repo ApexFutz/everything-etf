@@ -159,7 +159,7 @@ solana program deploy "${PROGRAM_SO}" \
   --url "${RPC_URL}"
 
 log "deployed. verifying on-chain state:"
-solana program show "${DECLARED_ID}" --url "${RPC_URL}"
+solana program show "${DECLARED_ID}" --keypair "${DEPLOYER}" --url "${RPC_URL}"
 
 cat <<EOF
 
