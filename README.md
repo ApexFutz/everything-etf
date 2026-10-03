@@ -230,6 +230,14 @@ dependencies need a linker/CRT configured manually (e.g. via `xwin` + `lld-link`
 Solana's own platform-tools) through a machine-specific `.cargo/config.toml`, which is
 gitignored since it hardcodes local paths.
 
+## Web app
+
+[`app/`](app/) is a Next.js frontend — connect a wallet, create/seed/mint/redeem baskets,
+claim fees, and run the one-time protocol/coin setup. See [`app/README.md`](app/README.md)
+for setup; it talks to whatever program ID/cluster you point it at via `.env.local`; there's
+no Anchor TS client involved (no Anchor CLI in this toolchain to generate an IDL from), so it
+hand-builds every instruction itself under `app/src/lib/etf/`.
+
 ## Roadmap
 
 1. ✅ **v0.1:** $EETF, baskets, in-kind mint/redeem, fees, events *(this release)*
