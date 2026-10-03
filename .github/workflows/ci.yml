@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust (unit + e2e tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cargo registry, git deps, and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      # Platform-tools (the SBF-target rustc/clang/lld) isn't versioned by
+      # Cargo.lock, so it gets its own cache keyed on a fixed version string
+      # below — bump it if the Solana/Agave install step's channel moves to
+      # a platform-tools release incompatible with the cached one.
+      - name: Cache Solana platform-tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/solana
+          key: solana-platform-tools-${{ runner.os }}-v1
+
+      - name: Install the Solana CLI (provides cargo-build-sbf)
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      # Scoped to the program's own manifest: a bare `cargo-build-sbf` from
+      # the workspace root also tries to build tests-e2e (litesvm and
+      # friends) for the SBF target, which fails — those crates are host-only.
+      - name: Build the program for the SBF target
+        run: cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml
+
+      # tests-e2e loads target/deploy/everything_etf.so into litesvm, so the
+      # SBF build above has to happen first.
+      - name: cargo test --workspace
+        run: cargo test --workspace --locked
+
+  app:
+    name: Web app (lint, typecheck, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npx eslint src
+      - run: npm run build

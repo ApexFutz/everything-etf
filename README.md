@@ -221,9 +221,13 @@ Two layers:
   so on — asserting the exact `EtfError` each one returns.
 
 ```bash
-cargo-build-sbf                   # produces target/deploy/everything_etf.so
+cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml  # -> target/deploy/everything_etf.so
 cargo test -p tests-e2e
 ```
+
+`--manifest-path` matters: a bare `cargo-build-sbf` from the workspace root also tries to
+build `tests-e2e` (litesvm and friends) for the SBF target, which fails — those crates are
+host-only.
 
 On Windows without Visual Studio installed, `cargo-build-sbf` and some of `tests-e2e`'s
 dependencies need a linker/CRT configured manually (e.g. via `xwin` + `lld-link` from
