@@ -23,6 +23,7 @@ use solana_address::Address;
 use solana_clock::Clock;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
+use solana_message::Message;
 use solana_signer::Signer;
 use solana_transaction::Transaction;
 
@@ -228,6 +229,24 @@ impl Env {
             signers,
             self.svm.latest_blockhash(),
         );
+        let res = self.svm.send_transaction(tx);
+        self.svm.expire_blockhash();
+        res
+    }
+
+    /// Submits a transaction that is deliberately missing one or more required
+    /// signatures, so the runtime rejects it rather than the client refusing to
+    /// build it. `send` can't express this: `new_signed_with_payer` panics when
+    /// a required signer is absent, which is a client-side guard, not the
+    /// on-chain behaviour a test wants to assert.
+    pub fn send_partially_signed(
+        &mut self,
+        ixs: &[Instruction],
+        signers: &[&Keypair],
+    ) -> Result<TransactionMetadata, FailedTransactionMetadata> {
+        let payer = signers[0].pubkey();
+        let mut tx = Transaction::new_unsigned(Message::new(ixs, Some(&payer)));
+        tx.partial_sign(signers, self.svm.latest_blockhash());
         let res = self.svm.send_transaction(tx);
         self.svm.expire_blockhash();
         res
@@ -866,6 +885,36 @@ impl Env {
         );
         let authority = self.authority.insecure_clone();
         self.send(&[ix], &[&authority])
+    }
+
+    /// Rotates the protocol authority. Both parties sign, as the program
+    /// requires; `signing_authority` lets a test pose as the wrong current
+    /// authority, and `new_authority_signs` lets it omit the incoming
+    /// party's signature.
+    pub fn update_authority(
+        &mut self,
+        signing_authority: &Keypair,
+        new_authority: &Keypair,
+        new_authority_signs: bool,
+    ) -> Result<TransactionMetadata, FailedTransactionMetadata> {
+        let ix = etf_instruction(
+            etf_accounts::UpdateAuthority {
+                authority: pk(signing_authority.pubkey()),
+                new_authority: pk(new_authority.pubkey()),
+                config: self.config,
+            },
+            etf_ix::UpdateAuthority {},
+            vec![],
+        );
+        let current = signing_authority.insecure_clone();
+        let incoming = new_authority.insecure_clone();
+        if new_authority_signs {
+            self.send(&[ix], &[&current, &incoming])
+        } else {
+            // Deliberately under-signed, so the runtime rejects it rather than
+            // the client refusing to build it.
+            self.send_partially_signed(&[ix], &[&current])
+        }
     }
 
     pub fn update_coin_terms(

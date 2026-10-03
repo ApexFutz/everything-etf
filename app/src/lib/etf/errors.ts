@@ -29,6 +29,7 @@ const VARIANTS = [
   ["NothingToBurn", "Burn vault is empty"],
   ["MintAuthorityNotRevoked", "Coin mint authority was not revoked"],
   ["MathOverflow", "Arithmetic overflow"],
+  ["AuthorityUnchanged", "New authority is the same as the current one"],
 ] as const;
 
 const ERROR_CODE_OFFSET = 6000;

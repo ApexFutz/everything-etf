@@ -200,6 +200,21 @@ export function updateProtocolTermsTx(args: {
   ];
 }
 
+/**
+ * Both `authority` and `newAuthority` have to sign the resulting transaction —
+ * the program requires it (see `instructions.updateAuthority`), so this can't
+ * be sent by one wallet alone.
+ */
+export function updateAuthorityTx(args: { authority: PublicKey; newAuthority: PublicKey }) {
+  return [
+    ix.updateAuthority({
+      authority: args.authority,
+      newAuthority: args.newAuthority,
+      config: configPda()[0],
+    }),
+  ];
+}
+
 export function initializeCoinTx(args: {
   authority: PublicKey;
   genesisOwner: PublicKey;

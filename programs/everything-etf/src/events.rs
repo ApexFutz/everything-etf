@@ -20,6 +20,13 @@ pub struct ProtocolTermsUpdated {
 }
 
 #[event]
+pub struct AuthorityUpdated {
+    pub previous: Pubkey,
+    pub new_authority: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
 pub struct BasketCreated {
     pub basket: Pubkey,
     pub id: u64,

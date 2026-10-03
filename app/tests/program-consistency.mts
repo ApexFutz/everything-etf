@@ -61,9 +61,8 @@ const BPF_LOADER_UPGRADEABLE_ID = new PublicKey("BPFLoaderUpgradeab1e11111111111
 
 // Imported dynamically, after the env var above is set — constants.ts
 // reads NEXT_PUBLIC_ETF_PROGRAM_ID at module-load time.
-const { initializeConfigTx, initializeCoinTx, fetchConfig, fetchCoinConfig } = await import(
-  "../src/lib/etf/client.js"
-);
+const { initializeConfigTx, initializeCoinTx, updateAuthorityTx, fetchConfig, fetchCoinConfig } =
+  await import("../src/lib/etf/client.js");
 
 // ---------------------------------------------------------------------------
 // @solana/web3.js <-> @solana/kit conversions, scoped to this test
@@ -209,6 +208,21 @@ async function main() {
   const mintAuthorityOption = mintData.readUInt32LE(0); // spl-token Mint: COption<Pubkey> tag first
   assert.equal(mintAuthorityOption, 0, "$EETF mint authority must be revoked (COption::None)");
   console.log("OK  initialize_coin: $EETF mint authority revoked");
+
+  // --- update_authority ----------------------------------------------------
+  // Two signers in one instruction, which no other instruction here has —
+  // worth covering precisely because it's the shape most likely to be built
+  // wrong on the TS side.
+  const nextAuthority = Keypair.generate();
+  svm.airdrop(toAddress(nextAuthority.publicKey), lamports(1_000_000_000n));
+  await send(
+    svm,
+    updateAuthorityTx({ authority: authority.publicKey, newAuthority: nextAuthority.publicKey }),
+    [authority, nextAuthority],
+  );
+  const rotated = decodeConfig(getAccountData(svm, configPda()[0]));
+  assert.equal(rotated.authority.toBase58(), nextAuthority.publicKey.toBase58(), "rotated authority");
+  console.log("OK  update_authority: both-signer instruction lands and Config.authority moves");
 
   // Sanity check that fetchConfig/fetchCoinConfig (the functions the app
   // actually calls) agree, via a tiny connection-shaped shim over litesvm.

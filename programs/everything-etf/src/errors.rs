@@ -54,4 +54,10 @@ pub enum EtfError {
     MintAuthorityNotRevoked,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    // Append new variants here, never in the middle: Anchor derives each
+    // error's code from its position (6000 + index), so inserting one
+    // renumbers every variant after it — breaking clients and tests that
+    // match on the old numbers.
+    #[msg("New authority is the same as the current one")]
+    AuthorityUnchanged,
 }

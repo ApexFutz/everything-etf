@@ -45,6 +45,73 @@ fn initialize_coin_rejects_creation_fee_above_cap() {
 }
 
 // ---------------------------------------------------------------------------
+// update_authority
+// ---------------------------------------------------------------------------
+
+#[test]
+fn update_authority_rotates_and_moves_the_privilege() {
+    let mut env = Env::new();
+    let old = env.authority.insecure_clone();
+    let new = solana_keypair::Keypair::new();
+    env.svm
+        .airdrop(&solana_signer::Signer::pubkey(&new), 100 * SOL)
+        .unwrap();
+
+    env.update_authority(&old, &new, true)
+        .expect("rotation with both signatures should succeed");
+    assert_eq!(env.config_account().authority, pubkey_of(&new));
+
+    // The privilege has actually moved: the old key can no longer change terms.
+    let treasury = pubkey_of(&env.treasury);
+    let res = env.update_protocol_terms(treasury, 0, 500);
+    assert_etf_error(res, EtfError::Unauthorized);
+
+    // ...and the new one can. `update_protocol_terms` signs as env.authority,
+    // so point that at the new key before calling it.
+    env.authority = new.insecure_clone();
+    env.update_protocol_terms(treasury, 0, 500)
+        .expect("the new authority should now be able to change terms");
+    assert_eq!(env.config_account().protocol_share_bps, 500);
+}
+
+/// The whole point of making `new_authority` a `Signer`: an address that
+/// can't sign can't be installed, so a typo'd pubkey can't permanently lock
+/// the protocol out of its own admin role.
+#[test]
+fn update_authority_rejects_an_incoming_key_that_does_not_sign() {
+    let mut env = Env::new();
+    let old = env.authority.insecure_clone();
+    let typo = solana_keypair::Keypair::new(); // stands in for a wrong pubkey
+
+    let res = env.update_authority(&old, &typo, false);
+    assert!(
+        res.is_err(),
+        "rotation must fail without the incoming authority's signature"
+    );
+    // Unchanged, so the protocol is still controllable.
+    assert_eq!(env.config_account().authority, pubkey_of(&old));
+}
+
+#[test]
+fn update_authority_rejects_a_non_authority_caller() {
+    let mut env = Env::new();
+    let impostor = env.alice.insecure_clone();
+    let new = solana_keypair::Keypair::new();
+
+    let res = env.update_authority(&impostor, &new, true);
+    assert_etf_error(res, EtfError::Unauthorized);
+    assert_eq!(env.config_account().authority, pubkey_of(&env.authority));
+}
+
+#[test]
+fn update_authority_rejects_rotating_to_the_same_key() {
+    let mut env = Env::new();
+    let same = env.authority.insecure_clone();
+    let res = env.update_authority(&same, &same, true);
+    assert_etf_error(res, EtfError::AuthorityUnchanged);
+}
+
+// ---------------------------------------------------------------------------
 // update_protocol_terms / update_coin_terms
 // ---------------------------------------------------------------------------
 

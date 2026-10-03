@@ -121,6 +121,24 @@ export function updateProtocolTerms(args: {
   });
 }
 
+/**
+ * Rotates the protocol authority. Note both accounts are signers: the program
+ * requires the incoming authority to co-sign, so an address that can't sign
+ * (a typo) can't be installed and lock the protocol out of its admin role.
+ */
+export function updateAuthority(args: {
+  authority: PublicKey;
+  newAuthority: PublicKey;
+  config: PublicKey;
+}): TransactionInstruction {
+  const data = new Writer().bytes(DISC.update_authority).finish();
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [signerR(args.authority), signerR(args.newAuthority), w(args.config)],
+    data,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // initialize_coin / update_coin_terms
 // ---------------------------------------------------------------------------

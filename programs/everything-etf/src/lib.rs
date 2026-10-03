@@ -42,6 +42,13 @@ pub mod everything_etf {
         instructions::update_protocol_terms::handler(ctx, treasury, creation_fee_lamports, protocol_share_bps)
     }
 
+    /// Hand the protocol authority to a new key. Both the current and the
+    /// incoming authority must sign, so an address nobody controls can never
+    /// be installed — see the instruction's own docs.
+    pub fn update_authority(ctx: Context<UpdateAuthority>) -> Result<()> {
+        instructions::update_authority::handler(ctx)
+    }
+
     /// Mint $EETF: whole fixed supply at once, then the mint authority is
     /// revoked in the same instruction. Callable exactly once.
     pub fn initialize_coin(

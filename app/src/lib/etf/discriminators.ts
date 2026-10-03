@@ -14,6 +14,7 @@
 export const INSTRUCTION_DISCRIMINATORS = {
   initialize_config: [208, 127, 21, 1, 194, 190, 196, 70],
   update_protocol_terms: [19, 128, 92, 219, 14, 97, 117, 87],
+  update_authority: [32, 46, 64, 28, 149, 75, 243, 88],
   initialize_coin: [157, 22, 183, 45, 31, 253, 33, 186],
   update_coin_terms: [86, 39, 64, 13, 55, 234, 184, 58],
   crank_burn: [51, 203, 144, 198, 171, 213, 49, 54],

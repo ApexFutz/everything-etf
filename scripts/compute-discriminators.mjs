@@ -20,6 +20,7 @@ function disc(namespace, name) {
 const instructions = [
   "initialize_config",
   "update_protocol_terms",
+  "update_authority",
   "initialize_coin",
   "update_coin_terms",
   "crank_burn",
