@@ -206,6 +206,17 @@ fn create_basket_rejects_duplicate_assets() {
     assert_etf_error(res, EtfError::DuplicateAsset);
 }
 
+/// The launch form doesn't ask for a metadata URI, so it sends an empty one —
+/// this pins down that both the program and the Metaplex CPI accept that.
+#[test]
+fn create_basket_accepts_an_empty_uri() {
+    let mut env = Env::new();
+    let assets = env.with_three_assets();
+    let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
+    env.create_basket_named(&assets.mints, manager_coin, "Frog Basket", "FROG", "", 50, 50, 200)
+        .expect("an empty metadata URI should be accepted");
+}
+
 #[test]
 fn create_basket_rejects_metadata_too_long() {
     let mut env = Env::new();

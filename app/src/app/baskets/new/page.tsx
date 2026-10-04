@@ -1,36 +1,133 @@
 "use client";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Banner, Button, Card, Field, TextArea, TextInput } from "@/components/ui";
-import { createBasketTx, fetchCoinConfig, fetchConfig } from "@/lib/etf/client";
-import { createAndFundTestMints } from "@/lib/etf/devHelpers";
-import { MAX_ASSETS, MAX_MINT_FEE_BPS, MAX_REDEEM_FEE_BPS, MAX_STREAMING_FEE_BPS, MIN_ASSETS } from "@/lib/etf/constants";
-import { useSendTx } from "@/hooks/useSendTx";
+import { getMint } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
-import { explorerTxUrl } from "@/lib/format";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { Banner, Button, Card, Field, Pill, TextArea, TextInput } from "@/components/ui";
+import { createBasketTx, fetchCoinConfig, fetchConfig, seedBasketTx } from "@/lib/etf/client";
+import { estimateCreateCost, CreateCostEstimate } from "@/lib/etf/costs";
+import { createAndFundTestMints } from "@/lib/etf/devHelpers";
+import {
+  BASKET_DECIMALS,
+  COIN_DECIMALS,
+  MAX_ASSETS,
+  MAX_MINT_FEE_BPS,
+  MAX_REDEEM_FEE_BPS,
+  MAX_STREAMING_FEE_BPS,
+  MIN_ASSETS,
+} from "@/lib/etf/constants";
+import { CoinConfig, Config } from "@/lib/etf/accounts";
+import { explorerTxUrl, formatBps, formatTokens, parseToBaseUnits, shortAddress } from "@/lib/format";
+import { useSendTx } from "@/hooks/useSendTx";
+
+/**
+ * Basket tokens the first deposit creates. At seed time there's no prior NAV,
+ * so this number only sets the denomination — asking the user would be asking a
+ * question with no meaningful answer. The seeder ends up holding all of it.
+ */
+const INITIAL_SUPPLY_TOKENS = 1_000_000n;
+
+type Asset = { address: PublicKey; decimals: number };
 
 export default function NewBasketPage() {
   const { connection } = useConnection();
   const { publicKey } = useWallet();
   const router = useRouter();
-  const { send, pending, error, signature, setError } = useSendTx();
+  const { send, pending, error, setError } = useSendTx();
 
-  const [name, setName] = useState("Equal Weight Three");
-  const [symbol, setSymbol] = useState("EW3");
-  const [uri, setUri] = useState("https://example.com/basket.json");
-  const [mintFeeBps, setMintFeeBps] = useState("50");
-  const [redeemFeeBps, setRedeemFeeBps] = useState("50");
-  const [streamingFeeBps, setStreamingFeeBps] = useState("200");
+  const [name, setName] = useState("");
+  const [symbol, setSymbol] = useState("");
   const [assetsText, setAssetsText] = useState("");
-  const [minting, setMinting] = useState(false);
-  const [createdBasketId, setCreatedBasketId] = useState<bigint | null>(null);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetError, setAssetError] = useState<string | null>(null);
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
 
-  const assetLines = assetsText
-    .split(/\s|,/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const [config, setConfig] = useState<Config | null>(null);
+  const [coinConfig, setCoinConfig] = useState<CoinConfig | null>(null);
+  const [cost, setCost] = useState<CreateCostEstimate | null>(null);
+
+  const [showFees, setShowFees] = useState(false);
+  const [mintFeePct, setMintFeePct] = useState("0.5");
+  const [redeemFeePct, setRedeemFeePct] = useState("0.5");
+  const [streamingFeePct, setStreamingFeePct] = useState("2");
+
+  const [minting, setMinting] = useState(false);
+  const [step, setStep] = useState<null | "creating" | "buying">(null);
+  const [done, setDone] = useState<{ id: bigint; signature: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [cfg, coin] = await Promise.all([fetchConfig(connection), fetchCoinConfig(connection)]);
+      if (cancelled) return;
+      setConfig(cfg);
+      setCoinConfig(coin);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection]);
+
+  // Resolve pasted addresses into real mints — the deposit amounts need each
+  // one's decimals, and catching a bad address here beats failing mid-launch.
+  const resolveAssets = useCallback(
+    async (text: string) => {
+      const parts = text
+        .split(/[\s,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (parts.length === 0) {
+        setAssets([]);
+        setAssetError(null);
+        return;
+      }
+      try {
+        const keys = parts.map((p) => new PublicKey(p));
+        const resolved = await Promise.all(
+          keys.map(async (address) => ({
+            address,
+            decimals: (await getMint(connection, address)).decimals,
+          })),
+        );
+        setAssets(resolved);
+        setAmounts((prev) => {
+          const next: Record<string, string> = {};
+          for (const a of resolved) next[a.address.toBase58()] = prev[a.address.toBase58()] ?? "1000";
+          return next;
+        });
+        setAssetError(null);
+      } catch {
+        setAssets([]);
+        setAssetError("One of those addresses isn't a token mint on this cluster.");
+      }
+    },
+    [connection],
+  );
+
+  useEffect(() => {
+    const t = setTimeout(() => void resolveAssets(assetsText), 400);
+    return () => clearTimeout(t);
+  }, [assetsText, resolveAssets]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next = assets.length === 0 ? null : await estimateCreateCost(connection, assets.length);
+      if (!cancelled) setCost(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, assets.length]);
+
+  const countOk = assets.length >= MIN_ASSETS && assets.length <= MAX_ASSETS;
+  const amountsOk = countOk && assets.every((a) => Number(amounts[a.address.toBase58()] ?? "0") > 0);
+  const canSubmit = Boolean(publicKey && name && symbol && amountsOk && config && coinConfig);
+
+  const solCost =
+    (config?.creationFeeLamports ?? 0n) + (cost ? cost.rentLamports + cost.networkFeeLamports : 0n);
 
   async function makeTestAssets() {
     if (!publicKey) return setError("connect a wallet first");
@@ -39,9 +136,7 @@ export default function NewBasketPage() {
     try {
       const { instructions, mints } = await createAndFundTestMints(connection, publicKey, publicKey, 3);
       const sig = await send(instructions, mints);
-      if (sig) {
-        setAssetsText(mints.map((m) => m.publicKey.toBase58()).join("\n"));
-      }
+      if (sig) setAssetsText(mints.map((m) => m.publicKey.toBase58()).join("\n"));
     } finally {
       setMinting(false);
     }
@@ -49,139 +144,294 @@ export default function NewBasketPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!publicKey) return setError("connect a wallet first");
+    if (!publicKey || !config || !coinConfig) return setError("connect a wallet first");
     setError(null);
-    setCreatedBasketId(null);
+    setDone(null);
+
     try {
-      let assets: PublicKey[];
-      try {
-        assets = assetLines.map((a) => new PublicKey(a));
-      } catch {
-        return setError("one of the asset addresses isn't a valid pubkey");
-      }
-      if (assets.length < MIN_ASSETS || assets.length > MAX_ASSETS) {
-        return setError(`a basket needs between ${MIN_ASSETS} and ${MAX_ASSETS} assets (got ${assets.length})`);
-      }
+      const pct = (v: string) => Math.round(Number(v) * 100); // percent -> bps
+      const basketCount = config.basketCount;
 
-      const [config, coinConfig] = await Promise.all([fetchConfig(connection), fetchCoinConfig(connection)]);
-      if (!config || !coinConfig) {
-        return setError("protocol isn't initialized on this cluster yet — see Admin");
-      }
-
-      const { instructions } = createBasketTx({
+      // Two transactions on purpose: create_basket allocates a vault per asset,
+      // so bundling the seed into the same transaction risks blowing the
+      // account/size limits once a basket has more than a few tokens.
+      setStep("creating");
+      const { instructions, basket, basketMint } = createBasketTx({
         manager: publicKey,
         treasury: config.treasury,
         devTreasury: coinConfig.devTreasury,
-        basketCount: config.basketCount,
-        assets,
+        basketCount,
+        assets: assets.map((a) => a.address),
         name,
         symbol,
-        uri,
-        mintFeeBps: Number(mintFeeBps),
-        redeemFeeBps: Number(redeemFeeBps),
-        streamingFeeBps: Number(streamingFeeBps),
+        uri: "",
+        mintFeeBps: pct(mintFeePct),
+        redeemFeeBps: pct(redeemFeePct),
+        streamingFeeBps: pct(streamingFeePct),
       });
-      const sig = await send(instructions);
-      if (sig) setCreatedBasketId(config.basketCount);
+      const createSig = await send(instructions);
+      if (!createSig) return setStep(null);
+
+      setStep("buying");
+      const seedSig = await send(
+        seedBasketTx({
+          manager: publicKey,
+          basket,
+          basketMint,
+          assets: assets.map((a) => a.address),
+          initialSupply: INITIAL_SUPPLY_TOKENS * 10n ** BigInt(BASKET_DECIMALS),
+          amounts: assets.map((a) =>
+            parseToBaseUnits(amounts[a.address.toBase58()] ?? "0", a.decimals),
+          ),
+        }),
+      );
+      setStep(null);
+      if (seedSig) setDone({ id: basketCount, signature: seedSig });
     } catch (e) {
+      setStep(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6 px-6 py-10">
-      <h1 className="text-xl font-semibold">Create a basket</h1>
-      <p className="text-sm text-muted">
-        Burns the $EETF creation fee from your wallet, then launches an equal-weight basket over
-        the assets you list below (2–{MAX_ASSETS}).
-      </p>
+    <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Launch a basket</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          Pick {MIN_ASSETS}–{MAX_ASSETS} tokens, make the first deposit, and you hold 100% of the new
+          basket token. Anyone can then mint more by depositing the same tokens, or redeem for their
+          share of what it holds.
+        </p>
+      </div>
 
-      <Card>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+      <form onSubmit={onSubmit} className="space-y-5">
+        <Card>
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name">
-              <TextInput value={name} onChange={(e) => setName(e.target.value)} maxLength={32} required />
+              <TextInput
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={32}
+                placeholder="Frog Basket"
+                required
+              />
             </Field>
             <Field label="Symbol">
-              <TextInput value={symbol} onChange={(e) => setSymbol(e.target.value)} maxLength={10} required />
-            </Field>
-          </div>
-          <Field label="Metadata URI" hint="Points at this basket's off-chain JSON (name/image/holdings page).">
-            <TextInput value={uri} onChange={(e) => setUri(e.target.value)} maxLength={200} required />
-          </Field>
-
-          <div className="grid grid-cols-3 gap-4">
-            <Field label="Mint fee (bps)" hint={`max ${MAX_MINT_FEE_BPS}`}>
               <TextInput
-                type="number"
-                min={0}
-                max={MAX_MINT_FEE_BPS}
-                value={mintFeeBps}
-                onChange={(e) => setMintFeeBps(e.target.value)}
-              />
-            </Field>
-            <Field label="Redeem fee (bps)" hint={`max ${MAX_REDEEM_FEE_BPS}`}>
-              <TextInput
-                type="number"
-                min={0}
-                max={MAX_REDEEM_FEE_BPS}
-                value={redeemFeeBps}
-                onChange={(e) => setRedeemFeeBps(e.target.value)}
-              />
-            </Field>
-            <Field label="Streaming fee (bps/yr)" hint={`max ${MAX_STREAMING_FEE_BPS}`}>
-              <TextInput
-                type="number"
-                min={0}
-                max={MAX_STREAMING_FEE_BPS}
-                value={streamingFeeBps}
-                onChange={(e) => setStreamingFeeBps(e.target.value)}
+                value={symbol}
+                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                maxLength={10}
+                placeholder="FROG"
+                required
               />
             </Field>
           </div>
+        </Card>
 
+        <Card className="space-y-3">
           <Field
-            label={`Asset mints (${assetLines.length})`}
-            hint="One SPL/Token-2022 mint address per line (or comma-separated). No freeze authority allowed."
+            label="Tokens in the basket"
+            hint="One mint address per line. Each token is an equal 1/N share of the basket."
           >
             <TextArea
               value={assetsText}
               onChange={(e) => setAssetsText(e.target.value)}
-              rows={5}
-              placeholder="So11111111111111111111111111111111111111112&#10;..."
+              rows={4}
+              placeholder="Paste token mint addresses, one per line"
             />
           </Field>
-          <Button type="button" variant="secondary" onClick={makeTestAssets} disabled={minting || pending}>
-            {minting ? "Minting test tokens…" : "Dev helper: mint 3 fresh test tokens to my wallet"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="secondary" onClick={makeTestAssets} disabled={minting || pending}>
+              {minting ? "Minting…" : "Mint 3 test tokens to my wallet"}
+            </Button>
+            {assets.length > 0 && (
+              <Pill tone={countOk ? "accent" : "warn"}>
+                {assets.length} token{assets.length === 1 ? "" : "s"}
+                {countOk ? "" : ` — need ${MIN_ASSETS}–${MAX_ASSETS}`}
+              </Pill>
+            )}
+          </div>
+          {assetError && <Banner kind="error">{assetError}</Banner>}
+        </Card>
 
-          {error && <Banner kind="error">{error}</Banner>}
-          {signature && createdBasketId === null && (
-            <Banner kind="success">
-              Sent.{" "}
-              <a className="underline" href={explorerTxUrl(signature)} target="_blank" rel="noreferrer">
-                View transaction
-              </a>
-            </Banner>
-          )}
-          {createdBasketId !== null && (
-            <Banner kind="success">
-              Basket #{createdBasketId.toString()} created.{" "}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => router.push(`/baskets/${createdBasketId}`)}
-              >
-                Go seed it
-              </button>
-            </Banner>
-          )}
+        {countOk && (
+          <Card className="space-y-4">
+            <div>
+              <h2 className="font-semibold">Initial buy</h2>
+              <p className="mt-1 text-sm text-muted">
+                How much of each token you&apos;re putting in — this is what backs the basket on day
+                one. Equal weight means these should be worth roughly the same as each other.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {assets.map((a) => {
+                const key = a.address.toBase58();
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <code className="w-28 shrink-0 text-xs text-muted">{shortAddress(key, 5)}</code>
+                    <TextInput
+                      value={amounts[key] ?? ""}
+                      onChange={(e) => setAmounts((p) => ({ ...p, [key]: e.target.value }))}
+                      inputMode="decimal"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="rounded-lg bg-accent-soft px-4 py-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-accent">You receive</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums text-accent">
+                {formatTokens(INITIAL_SUPPLY_TOKENS * 10n ** BigInt(BASKET_DECIMALS), BASKET_DECIMALS)}{" "}
+                {symbol || "tokens"}
+              </div>
+              <div className="mt-0.5 text-xs text-accent">
+                100% of the basket — nobody else holds any until someone mints.
+              </div>
+            </div>
+          </Card>
+        )}
 
-          <Button type="submit" disabled={pending || !publicKey}>
-            {pending ? "Sending…" : "Create basket"}
+        {countOk && config && coinConfig && (
+          <Card className="space-y-4">
+            <h2 className="font-semibold">Total cost</h2>
+
+            <dl className="space-y-2 text-sm">
+              <CostRow label="Your deposit">
+                <div className="text-right">
+                  {assets.map((a) => (
+                    <div key={a.address.toBase58()} className="tabular-nums">
+                      {amounts[a.address.toBase58()] || "0"}{" "}
+                      <span className="text-muted">{shortAddress(a.address.toBase58(), 4)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CostRow>
+
+              <CostRow label="Launch fee">
+                <span className="tabular-nums">
+                  {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF
+                </span>
+              </CostRow>
+              <div className="pl-4 text-xs text-burn">
+                {formatBps(coinConfig.creationBurnBps)} of that is burned forever
+              </div>
+
+              {config.creationFeeLamports > 0n && (
+                <CostRow label="Protocol fee">
+                  <span className="tabular-nums">{formatTokens(config.creationFeeLamports, 9, 4)} SOL</span>
+                </CostRow>
+              )}
+
+              {cost && (
+                <CostRow label="Account rent + network fees">
+                  <span className="tabular-nums">
+                    ~{formatTokens(cost.rentLamports + cost.networkFeeLamports, 9, 4)} SOL
+                  </span>
+                </CostRow>
+              )}
+
+              <div className="border-t border-border pt-3">
+                <CostRow label={<span className="font-semibold text-foreground">Total</span>}>
+                  <div className="text-right font-semibold tabular-nums">
+                    <div>~{formatTokens(solCost, 9, 4)} SOL</div>
+                    <div>{formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF</div>
+                    <div className="font-normal text-muted">+ your deposit above</div>
+                  </div>
+                </CostRow>
+              </div>
+            </dl>
+
+            <div className="rounded-lg border border-border bg-surface-2 px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  Fees you&apos;ll charge: <strong className="tabular-nums">{mintFeePct}%</strong> to
+                  mint · <strong className="tabular-nums">{redeemFeePct}%</strong> to redeem ·{" "}
+                  <strong className="tabular-nums">{streamingFeePct}%</strong> a year
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowFees((v) => !v)}
+                  className="text-xs text-accent underline decoration-dotted underline-offset-2"
+                >
+                  {showFees ? "Hide" : "Change"}
+                </button>
+              </div>
+
+              {showFees && (
+                <div className="mt-4 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="To mint %" hint={`max ${formatBps(MAX_MINT_FEE_BPS)}`}>
+                      <TextInput
+                        value={mintFeePct}
+                        onChange={(e) => setMintFeePct(e.target.value)}
+                        inputMode="decimal"
+                      />
+                    </Field>
+                    <Field label="To redeem %" hint={`max ${formatBps(MAX_REDEEM_FEE_BPS)}`}>
+                      <TextInput
+                        value={redeemFeePct}
+                        onChange={(e) => setRedeemFeePct(e.target.value)}
+                        inputMode="decimal"
+                      />
+                    </Field>
+                    <Field label="Per year %" hint={`max ${formatBps(MAX_STREAMING_FEE_BPS)}`}>
+                      <TextInput
+                        value={streamingFeePct}
+                        onChange={(e) => setStreamingFeePct(e.target.value)}
+                        inputMode="decimal"
+                      />
+                    </Field>
+                  </div>
+                  <Banner kind="warn">
+                    You can lower these later but never raise them — what you set now is a permanent
+                    ceiling. Mint and redeem fees are paid by people trading in and out; the yearly
+                    fee is charged to everyone holding, by slowly minting new basket tokens to you.
+                    You keep {formatBps(10_000 - config.protocolShareBps)} of all three and the
+                    protocol takes {formatBps(config.protocolShareBps)}.
+                  </Banner>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {error && <Banner kind="error">{error}</Banner>}
+
+        {done && (
+          <Banner kind="success">
+            <strong>{symbol} is live.</strong>{" "}
+            <button type="button" className="underline" onClick={() => router.push(`/baskets/${done.id}`)}>
+              Open basket #{done.id.toString()}
+            </button>{" "}
+            ·{" "}
+            <a className="underline" href={explorerTxUrl(done.signature)} target="_blank" rel="noreferrer">
+              View transaction
+            </a>
+          </Banner>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={!canSubmit || pending || step !== null}>
+            {step === "creating"
+              ? "1 of 2 — creating basket…"
+              : step === "buying"
+                ? "2 of 2 — making your initial buy…"
+                : !publicKey
+                  ? "Connect a wallet"
+                  : "Launch & buy"}
           </Button>
-        </form>
-      </Card>
+          {step !== null && <span className="text-xs text-muted">Two transactions — approve both.</span>}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function CostRow({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <dt className="text-muted">{label}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }
