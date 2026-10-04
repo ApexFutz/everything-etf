@@ -16,9 +16,10 @@ export const BPS = 10_000n;
 export const MIN_ASSETS = 2;
 export const MAX_ASSETS = 10;
 
-export const MAX_MINT_FEE_BPS = 100; // 1%
-export const MAX_REDEEM_FEE_BPS = 100; // 1%
-export const MAX_STREAMING_FEE_BPS = 300; // 3% / year
+// Mirror of constants.rs — the consistency test fails if these drift.
+export const MAX_MINT_FEE_BPS = 25; // 0.25%
+export const MAX_REDEEM_FEE_BPS = 0; // redemption is always free
+export const MAX_STREAMING_FEE_BPS = 50; // 0.5% / year
 export const MAX_PROTOCOL_SHARE_BPS = 3_000; // 30%
 
 export const BASKET_DECIMALS = 9;

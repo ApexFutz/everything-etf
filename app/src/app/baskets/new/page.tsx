@@ -8,13 +8,18 @@ import { Banner, Button, Card, Field, Pill, TextInput } from "@/components/ui";
 import { TokenPicker } from "@/components/TokenPicker";
 import { createBasketTx, fetchCoinConfig, fetchConfig, seedBasketTx } from "@/lib/etf/client";
 import { estimateCreateCost, CreateCostEstimate } from "@/lib/etf/costs";
+import {
+  CREATION_FEE_USD_TARGET,
+  fetchUsdPrice,
+  usdValueOfCoin,
+  WRAPPED_SOL_MINT,
+} from "@/lib/etf/pricing";
 import { createAndFundTestMints } from "@/lib/etf/devHelpers";
 import {
   BASKET_DECIMALS,
   COIN_DECIMALS,
   MAX_ASSETS,
   MAX_MINT_FEE_BPS,
-  MAX_REDEEM_FEE_BPS,
   MAX_STREAMING_FEE_BPS,
   MIN_ASSETS,
 } from "@/lib/etf/constants";
@@ -51,11 +56,15 @@ export default function NewBasketPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [coinConfig, setCoinConfig] = useState<CoinConfig | null>(null);
   const [cost, setCost] = useState<CreateCostEstimate | null>(null);
+  /** Live USD per $EETF and per SOL, for showing what the fees actually cost. */
+  const [prices, setPrices] = useState<{ coin: number | null; sol: number | null }>({
+    coin: null,
+    sol: null,
+  });
 
   const [showFees, setShowFees] = useState(false);
-  const [mintFeePct, setMintFeePct] = useState("0.5");
-  const [redeemFeePct, setRedeemFeePct] = useState("0.5");
-  const [streamingFeePct, setStreamingFeePct] = useState("2");
+  const [mintFeePct, setMintFeePct] = useState("0.25");
+  const [streamingFeePct, setStreamingFeePct] = useState("0.5");
 
   const [minting, setMinting] = useState(false);
   const [step, setStep] = useState<null | "creating" | "buying">(null);
@@ -139,12 +148,34 @@ export default function NewBasketPage() {
     };
   }, [connection, assets.length]);
 
+  // Dollar values are a nicety, so a failed or missing price just hides them —
+  // $EETF has no market until it trades, and `fetchUsdPrice` returns null then.
+  useEffect(() => {
+    let cancelled = false;
+    if (!coinConfig) return;
+    (async () => {
+      const [coin, sol] = await Promise.all([
+        fetchUsdPrice(coinConfig.mint.toBase58()),
+        fetchUsdPrice(WRAPPED_SOL_MINT),
+      ]);
+      if (!cancelled) setPrices({ coin, sol });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [coinConfig]);
+
   const countOk = assets.length >= MIN_ASSETS && assets.length <= MAX_ASSETS;
   const amountsOk = countOk && assets.every((a) => Number(amounts[a.address.toBase58()] ?? "0") > 0);
   const canSubmit = Boolean(publicKey && name && symbol && amountsOk && config && coinConfig);
 
   const solCost =
     (config?.creationFeeLamports ?? 0n) + (cost ? cost.rentLamports + cost.networkFeeLamports : 0n);
+  const usd = (lamports: bigint) =>
+    prices.sol === null ? null : (Number(lamports) / 1e9) * prices.sol;
+  const coinFeeUsd =
+    coinConfig && prices.coin !== null ? usdValueOfCoin(coinConfig.creationFeeCoin, prices.coin) : null;
+  const money = (v: number) => `$${v < 1 ? v.toFixed(2) : v.toFixed(v < 100 ? 2 : 0)}`;
 
   async function makeTestAssets() {
     if (!publicKey) return setError("connect a wallet first");
@@ -191,7 +222,8 @@ export default function NewBasketPage() {
         symbol,
         uri: "",
         mintFeeBps: pct(mintFeePct),
-        redeemFeeBps: pct(redeemFeePct),
+        // Always zero — redemption is free, and the program caps it at zero.
+        redeemFeeBps: 0,
         streamingFeeBps: pct(streamingFeePct),
       });
       const createSig = await send(instructions);
@@ -341,10 +373,17 @@ export default function NewBasketPage() {
               <CostRow label="Launch fee">
                 <span className="tabular-nums">
                   {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF
+                  {coinFeeUsd !== null && (
+                    <span className="text-muted"> ≈ {money(coinFeeUsd)}</span>
+                  )}
                 </span>
               </CostRow>
               <div className="pl-4 text-xs text-burn">
                 {formatBps(coinConfig.creationBurnBps)} of that is burned forever
+              </div>
+              <div className="pl-4 text-xs text-muted">
+                Targets {money(CREATION_FEE_USD_TARGET)} a launch, re-quoted in EETF as the price
+                moves.
               </div>
 
               {config.creationFeeLamports > 0n && (
@@ -364,8 +403,18 @@ export default function NewBasketPage() {
               <div className="border-t border-border pt-3">
                 <CostRow label={<span className="font-semibold text-foreground">Total</span>}>
                   <div className="text-right font-semibold tabular-nums">
-                    <div>~{formatTokens(solCost, 9, 4)} SOL</div>
-                    <div>{formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF</div>
+                    <div>
+                      ~{formatTokens(solCost, 9, 4)} SOL
+                      {usd(solCost) !== null && (
+                        <span className="font-normal text-muted"> ≈ {money(usd(solCost)!)}</span>
+                      )}
+                    </div>
+                    <div>
+                      {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF
+                      {coinFeeUsd !== null && (
+                        <span className="font-normal text-muted"> ≈ {money(coinFeeUsd)}</span>
+                      )}
+                    </div>
                     <div className="font-normal text-muted">+ your deposit above</div>
                   </div>
                 </CostRow>
@@ -376,8 +425,8 @@ export default function NewBasketPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>
                   Fees you&apos;ll charge: <strong className="tabular-nums">{mintFeePct}%</strong> to
-                  mint · <strong className="tabular-nums">{redeemFeePct}%</strong> to redeem ·{" "}
-                  <strong className="tabular-nums">{streamingFeePct}%</strong> a year
+                  mint · <strong className="tabular-nums">{streamingFeePct}%</strong> a year ·
+                  nothing to redeem
                 </span>
                 <button
                   type="button"
@@ -390,18 +439,11 @@ export default function NewBasketPage() {
 
               {showFees && (
                 <div className="mt-4 space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="To mint %" hint={`max ${formatBps(MAX_MINT_FEE_BPS)}`}>
                       <TextInput
                         value={mintFeePct}
                         onChange={(e) => setMintFeePct(e.target.value)}
-                        inputMode="decimal"
-                      />
-                    </Field>
-                    <Field label="To redeem %" hint={`max ${formatBps(MAX_REDEEM_FEE_BPS)}`}>
-                      <TextInput
-                        value={redeemFeePct}
-                        onChange={(e) => setRedeemFeePct(e.target.value)}
                         inputMode="decimal"
                       />
                     </Field>
@@ -415,11 +457,16 @@ export default function NewBasketPage() {
                   </div>
                   <Banner kind="warn">
                     You can lower these later but never raise them — what you set now is a permanent
-                    ceiling. Mint and redeem fees are paid by people trading in and out; the yearly
-                    fee is charged to everyone holding, by slowly minting new basket tokens to you.
-                    You keep {formatBps(10_000 - config.protocolShareBps)} of all three and the
-                    protocol takes {formatBps(config.protocolShareBps)}.
+                    ceiling. The mint fee is paid by people buying in; the yearly fee is charged to
+                    everyone holding, by slowly minting new basket tokens to you. You keep{" "}
+                    {formatBps(10_000 - config.protocolShareBps)} of both and the protocol takes{" "}
+                    {formatBps(config.protocolShareBps)}.
                   </Banner>
+                  <p className="text-xs text-muted">
+                    Redeeming is always free and can&apos;t be changed. Buying and selling at the
+                    basket&apos;s true value is what keeps its price tracking the coins inside it, so
+                    the protocol doesn&apos;t let anyone tax the way out.
+                  </p>
                 </div>
               )}
             </div>

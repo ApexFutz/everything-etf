@@ -6,6 +6,7 @@
 //! streaming-fee accrual, and manager/protocol fee claims — plus a few
 //! guard rails (fee caps, frozen-mint rejection, slippage).
 
+use everything_etf::constants::MAX_MINT_FEE_BPS;
 use everything_etf::errors::EtfError;
 use everything_etf::state::FeeRecipient;
 use tests_e2e::*;
@@ -39,7 +40,7 @@ fn full_basket_lifecycle() {
 
     let supply_before = env.mint_supply(env.coin_mint);
     let (basket, meta) = env
-        .create_basket(&assets.mints, manager_coin, 50, 50, 200)
+        .create_basket(&assets.mints, manager_coin, 25, 0, 50)
         .expect("create_basket should succeed");
     assert!(!meta.logs.is_empty());
 
@@ -86,14 +87,14 @@ fn full_basket_lifecycle() {
     )
     .expect("mint_basket should succeed");
 
-    // 0.5% mint fee: Alice nets 99.5, the other 0.5 basket tokens sit in escrow.
-    assert_eq!(env.token_balance(alice_basket_acc), 99_500_000_000);
-    assert_eq!(env.token_balance(basket.fee_escrow), 500_000_000);
+    // 0.25% mint fee: Alice nets 99.75, the other 0.25 basket tokens sit in escrow.
+    assert_eq!(env.token_balance(alice_basket_acc), 99_750_000_000);
+    assert_eq!(env.token_balance(basket.fee_escrow), 250_000_000);
     let b = env.basket_account(basket.key);
-    assert_eq!(b.manager_fees_accrued + b.protocol_fees_accrued, 500_000_000);
+    assert_eq!(b.manager_fees_accrued + b.protocol_fees_accrued, 250_000_000);
     // 10% protocol share, snapshotted from config at creation.
-    assert_eq!(b.protocol_fees_accrued, 50_000_000);
-    assert_eq!(b.manager_fees_accrued, 450_000_000);
+    assert_eq!(b.protocol_fees_accrued, 25_000_000);
+    assert_eq!(b.manager_fees_accrued, 225_000_000);
 
     // Each vault grew by 10% (Alice deposited 1/10th of the existing NAV, since
     // mint amount is computed pre-fee against pre-mint supply).
@@ -110,12 +111,12 @@ fn full_basket_lifecycle() {
     let supply_after_year = env.mint_supply(basket.mint);
     assert!(
         supply_after_year > supply_with_fee,
-        "a year of 2% streaming fee should have minted new basket tokens"
+        "a year of 0.5% streaming fee should have minted new basket tokens"
     );
-    // ~2% annual streaming fee against ~1,099.5 supply.
+    // ~0.5% annual streaming fee against ~1,099.75 supply.
     let minted = supply_after_year - supply_with_fee;
     let share = minted as f64 / supply_after_year as f64;
-    assert!((share - 0.02).abs() < 0.001, "share was {share}");
+    assert!((share - 0.005).abs() < 0.0005, "share was {share}");
 
     // Manager claims accrued fees: 25% basket tokens, 75% in-kind underlyings.
     let b = env.basket_account(basket.key);
@@ -168,11 +169,12 @@ fn full_basket_lifecycle() {
     .expect("redeem_basket should succeed");
     assert_eq!(env.token_balance(alice_basket_acc), 0);
 
-    // Manager lowers fees; raising them back is rejected.
-    env.lower_fees(&basket, 10, 10, 100)
+    // Manager lowers fees; raising them back is rejected. Redeem is already
+    // zero (the cap), so it can only ever be restated as zero.
+    env.lower_fees(&basket, 10, 0, 25)
         .expect("lowering fees should succeed");
     assert_eq!(env.basket_account(basket.key).mint_fee_bps, 10);
-    let raise = env.lower_fees(&basket, 20, 10, 100);
+    let raise = env.lower_fees(&basket, 20, 0, 25);
     assert_etf_error(raise, EtfError::FeeIncreaseNotAllowed);
 }
 
@@ -216,8 +218,7 @@ fn rejects_fees_above_hard_caps() {
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
     let assets = env.with_three_assets();
 
-    // MAX_MINT_FEE_BPS is 100 (1%).
-    let res = env.create_basket(&assets.mints, manager_coin, 101, 0, 0);
+    let res = env.create_basket(&assets.mints, manager_coin, MAX_MINT_FEE_BPS + 1, 0, 0);
     assert_etf_error(res, EtfError::FeeAboveCap);
 }
 
@@ -227,7 +228,7 @@ fn mint_respects_slippage_guard() {
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
     let (basket, _) = env
-        .create_basket(&assets.mints, manager_coin, 50, 50, 0)
+        .create_basket(&assets.mints, manager_coin, 25, 0, 0)
         .unwrap();
 
     let manager_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.manager));

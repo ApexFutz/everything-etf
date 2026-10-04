@@ -8,8 +8,12 @@
  *     --program-id <pubkey> \
  *     --admin ../keys/devnet-admin.json \
  *     [--url https://api.devnet.solana.com] \
- *     [--creation-fee-sol 0.25] [--protocol-share-bps 1000] \
+ *     [--creation-fee-sol 0.1] [--protocol-share-bps 1000] \
  *     [--coin-creation-fee 100000] [--coin-burn-bps 7000]
+ *
+ * The coin fee targets ~$5 per launch; 100,000 EETF is $5 at a $50k
+ * fully-diluted valuation. Once $EETF has a price, scripts/repeg-coin-fee-devnet.mts
+ * re-quotes it instead of this default.
  *
  * The admin keypair is used as: program upgrade authority (required by
  * initialize_config), protocol treasury, $EETF genesis owner, and $EETF dev
@@ -41,7 +45,7 @@ async function main() {
   if (!/^https?:\/\//.test(url)) {
     throw new Error(`--url must be a full http(s) RPC URL, got "${url}"`);
   }
-  const creationFeeSol = arg("creation-fee-sol", "0.25");
+  const creationFeeSol = arg("creation-fee-sol", "0.1");
   const protocolShareBps = arg("protocol-share-bps", "1000");
   const coinCreationFee = arg("coin-creation-fee", "100000");
   const coinBurnBps = arg("coin-burn-bps", "7000");

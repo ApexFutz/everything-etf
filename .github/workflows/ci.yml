@@ -51,7 +51,7 @@ jobs:
       # the workspace root also tries to build tests-e2e (litesvm and
       # friends) for the SBF target, which fails — those crates are host-only.
       - name: Build the program for the SBF target
-        run: cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml
+        run: cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml --arch v1
 
       # tests-e2e loads target/deploy/everything_etf.so into litesvm, so the
       # SBF build above has to happen first.

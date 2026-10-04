@@ -94,9 +94,9 @@ async function main() {
     name,
     symbol,
     uri: "",
-    mintFeeBps: 50,
-    redeemFeeBps: 50,
-    streamingFeeBps: 200,
+    mintFeeBps: 25,
+    redeemFeeBps: 0,
+    streamingFeeBps: 50,
   });
   console.log(`     ${await send(instructions)}`);
   console.log(`     basket ${basket.toBase58()}`);

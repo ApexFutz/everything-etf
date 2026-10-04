@@ -8,10 +8,23 @@ pub const BPS: u64 = 10_000;
 pub const MIN_ASSETS: usize = 2;
 pub const MAX_ASSETS: usize = 10;
 
-/// Hard fee caps.
-pub const MAX_MINT_FEE_BPS: u16 = 100; // 1%
-pub const MAX_REDEEM_FEE_BPS: u16 = 100; // 1%
-pub const MAX_STREAMING_FEE_BPS: u16 = 300; // 3% per year
+/// Hard fee caps. These double as the protocol's published fee schedule: a
+/// creator picks anything from zero up to the cap, and `lower_fees` lets them
+/// go down from there, so the cap is the worst a holder can ever be charged.
+///
+/// The numbers are deliberately below the comparable market. Mint and redeem
+/// fees are the arbitrage path that keeps a basket trading at NAV — every
+/// basis point charged there widens the band the price can drift inside before
+/// correcting it pays, which is why the large index products (Index Coop's DPI
+/// and MVI) charge zero on both. Redeeming is free here for that reason, and
+/// minting is capped at a quarter percent. The streaming fee carries the
+/// economics instead, since it doesn't touch the peg.
+pub const MAX_MINT_FEE_BPS: u16 = 25; // 0.25%
+/// Zero: redemption is always free, so exiting a basket can never be taxed and
+/// the no-arbitrage band stays as narrow as the mint fee alone. The field is
+/// kept on `Basket` rather than removed so the fee plumbing stays uniform.
+pub const MAX_REDEEM_FEE_BPS: u16 = 0;
+pub const MAX_STREAMING_FEE_BPS: u16 = 50; // 0.5% per year
 pub const MAX_PROTOCOL_SHARE_BPS: u16 = 3_000; // 30% of fees, ever
 
 /// Every fee claim (manager or protocol) pays 25% in basket tokens and 75% in

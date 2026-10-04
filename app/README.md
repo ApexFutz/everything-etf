@@ -55,6 +55,20 @@ npx tsx scripts/initialize-devnet.mts \
 That runs `initialize_config` and `initialize_coin` (skipping either if already done) and
 prints the `.env.local` values to use.
 
+### Keeping the launch fee pegged to $5
+
+`creation_fee_coin` is stored as a fixed number of $EETF base units, but the policy is a
+dollar amount (see the root README's fee model). `scripts/repeg-coin-fee-devnet.mts` reads
+the live price, works out what $5 of $EETF is, and sends `update_coin_terms` when the
+on-chain amount has drifted more than 25%:
+
+```bash
+npx tsx scripts/repeg-coin-fee-devnet.mts   --program-id <deployed program id>   --admin ../keys/devnet-admin.json   --dry-run
+```
+
+$EETF has no market until it trades, so before launch there is no price to read and
+`--eetf-price` has to be passed explicitly. Run it on a schedule once it does trade.
+
 ## Known simplifications (demo-grade, not production-grade)
 
 - **One keypair plays every admin role** in the initialize script (upgrade authority,

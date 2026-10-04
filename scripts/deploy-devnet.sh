@@ -84,7 +84,7 @@ log "using solana CLI: $(command -v solana) ($(solana --version))"
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   command -v cargo-build-sbf >/dev/null 2>&1 || die "cargo-build-sbf not found on PATH (it ships with the solana CLI install)"
   log "building (cargo-build-sbf)..."
-  cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml
+  cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml --arch v1
 else
   log "--skip-build: using the existing build at ${PROGRAM_SO}"
 fi
@@ -117,7 +117,7 @@ EOF
   sed -i "s/${DECLARED_ID}/${KEYPAIR_ID}/" "${LIB_RS}" "${ANCHOR_TOML}"
   DECLARED_ID="${KEYPAIR_ID}"
   log "rebuilding with the new program ID baked in..."
-  cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml
+  cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml --arch v1
 fi
 
 log "program ID: ${DECLARED_ID}"

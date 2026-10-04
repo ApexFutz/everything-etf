@@ -176,7 +176,7 @@ type Common = {
 function InitializeConfigForm({ pending, send, onDone, setError }: Common) {
   const { publicKey } = useWallet();
   const [treasury, setTreasury] = useState("");
-  const [creationFeeSol, setCreationFeeSol] = useState("0.25");
+  const [creationFeeSol, setCreationFeeSol] = useState("0.1");
   const [protocolShareBps, setProtocolShareBps] = useState("1000");
 
   async function onSubmit(e: React.FormEvent) {

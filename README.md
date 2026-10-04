@@ -43,9 +43,27 @@ from the manager and splits it in one transaction:
 - `creation_burn_bps` of it is **burned** — gone from supply, permanently
 - the remainder goes to the **dev treasury**, which funds the build
 
-Default suggestion: 250,000 EETF per basket, 70% burned / 30% dev. Both knobs
-move with `update_coin_terms`, both are bounded by hardcoded limits the
-authority cannot cross:
+**The fee targets $5 per launch, not a fixed number of coins.** A constant coin
+amount can't hold that target on its own: if $EETF appreciates 10x, launching
+costs 10x in real terms and launches stop — which stops the burn the whole
+supply story rests on — and if it craters, the fee stops filtering anything and
+spam baskets return. So `creation_fee_coin` is treated as a *cached quote* of
+the $5 target, and `app/scripts/repeg-coin-fee-devnet.mts` re-quotes it through
+`update_coin_terms` when it drifts more than 25%. The launch form shows the live
+dollar value next to the fee, so drift is visible to anyone launching rather
+than only to whoever runs the script.
+
+What the target implies, at a 1,000,000,000 genesis supply:
+
+| $EETF fully-diluted valuation | Price / coin | $5 launch fee |
+|---|---|---|
+| $50,000 | $0.00005 | 100,000 EETF |
+| $500,000 | $0.0005 | 10,000 EETF |
+| $5,000,000 | $0.005 | 1,000 EETF |
+
+The split stays 70% burned / 30% dev. Both knobs move with
+`update_coin_terms`, both are bounded by hardcoded limits the authority cannot
+cross:
 
 | Limit | Value | What it protects |
 |---|---|---|
@@ -117,15 +135,37 @@ for how to resolve that, and `--help` for all flags. It stops after the binary i
 
 | Item | Value |
 |---|---|
-| Creation fee | `creation_fee_coin` in $EETF — burned / dev split, see above |
-| Legacy SOL creation fee | `creation_fee_lamports`, set to 0 once the coin is live |
-| Mint / redeem fee | set per basket, hard cap 1% each |
-| Streaming (management) fee | set per basket, hard cap 3% / year |
+| Creation fee | `creation_fee_coin` in $EETF, targeting ~$5 — burned / dev split, see above |
+| SOL creation fee | `creation_fee_lamports`, 0.1 SOL by default |
+| Mint fee | set per basket, hard cap **0.25%** |
+| Redeem fee | **always zero** — `MAX_REDEEM_FEE_BPS` is 0 |
+| Streaming (management) fee | set per basket, hard cap **0.5% / year** |
 | Protocol share of all fees | 10% (locked onto each basket at creation, hard cap 30%) |
 | Payout split for every recipient | **75% cash leg / 25% basket tokens** |
 
 Example, 1 SOL of fees: protocol gets 0.075 cash + 0.025 in basket tokens;
 manager gets 0.675 cash + 0.225 in basket tokens.
+
+### Why those caps
+
+They sit below the comparable market deliberately. Index Coop's DPI charges
+0.95%/yr streaming with **0% mint and 0% redeem**; MVI charges 1.5%/yr on the
+same zero/zero basis; Symmetry, the closest Solana basket product, currently
+runs with management and performance fees disabled entirely.
+
+Mint and redeem are not ordinary revenue lines — they are the arbitrage path
+that keeps a basket trading at NAV. Every basis point charged there widens the
+band the price can drift inside before correcting it becomes profitable, so a
+0.5%-in / 0.5%-out schedule hands holders a 1% no-arbitrage band. That is why
+redeeming here is free and can't be switched on, minting is capped at a quarter
+percent, and the streaming fee — which doesn't touch the peg — carries the
+economics.
+
+For the SOL leg: pump.fun charges 0.02 SOL platform plus ~0.012 SOL of rent.
+0.1 SOL is above that, which is intended — a basket allocates a mint, metadata,
+a fee escrow and one vault per asset, and launching one is a fund launch rather
+than a naked token mint. The $EETF burn is what does the spam filtering, so the
+SOL leg only has to cover treasury liquidity.
 
 Fees accrue in basket-token units in a fee escrow owned by the basket PDA. On
 `claim_fees`, 25% is transferred as basket tokens and 75% is burned and paid out of the vault.
@@ -224,9 +264,15 @@ Two layers:
   so on — asserting the exact `EtfError` each one returns.
 
 ```bash
-cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml  # -> target/deploy/everything_etf.so
+cargo-build-sbf --manifest-path programs/everything-etf/Cargo.toml --arch v1  # -> target/deploy/everything_etf.so
 cargo test -p tests-e2e
 ```
+
+`--arch v1` matters as much as `--manifest-path`. Recent `cargo-build-sbf` releases default to
+`--arch v3`, which emits an SBPF v3 binary that litesvm 0.12 (and the pinned Agave in CI) refuses
+to load with a bare `InvalidAccountData` — and which lands in `target/sbpfv3-solana-solana/`
+instead of `target/sbpf-solana-solana/`, so the only visible symptom is every `tests-e2e` test
+failing at `add_program_from_file`. The deployed devnet program is v1; keep building v1.
 
 `--manifest-path` matters: a bare `cargo-build-sbf` from the workspace root also tries to
 build `tests-e2e` (litesvm and friends) for the SBF target, which fails — those crates are

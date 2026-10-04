@@ -3,7 +3,7 @@
 //! compiled binary and asserts the exact `EtfError` the program returns.
 
 use everything_etf::constants::{
-    MAX_ASSETS, MAX_CREATION_FEE_COIN, MAX_MINT_FEE_BPS, MAX_PROTOCOL_SHARE_BPS, MIN_ASSETS,
+    MAX_ASSETS, MAX_CREATION_FEE_COIN, MAX_PROTOCOL_SHARE_BPS, MAX_REDEEM_FEE_BPS, MIN_ASSETS,
     MIN_CREATION_BURN_BPS,
 };
 use everything_etf::errors::EtfError;
@@ -213,7 +213,7 @@ fn create_basket_accepts_an_empty_uri() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    env.create_basket_named(&assets.mints, manager_coin, "Frog Basket", "FROG", "", 50, 50, 200)
+    env.create_basket_named(&assets.mints, manager_coin, "Frog Basket", "FROG", "", 25, 0, 50)
         .expect("an empty metadata URI should be accepted");
 }
 
@@ -241,7 +241,7 @@ fn create_basket_rejects_redeem_fee_above_cap() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let res = env.create_basket(&assets.mints, manager_coin, 0, MAX_MINT_FEE_BPS + 1, 0);
+    let res = env.create_basket(&assets.mints, manager_coin, 0, MAX_REDEEM_FEE_BPS + 1, 0);
     assert_etf_error(res, EtfError::FeeAboveCap);
 }
 
@@ -452,7 +452,7 @@ fn claim_fees_rejects_wrong_claimer() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 50, 50, 0).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 25, 0, 0).unwrap();
 
     let manager_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.manager));
     env.seed_basket(
@@ -506,7 +506,7 @@ fn lower_fees_rejects_non_manager() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 50, 50, 100).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 25, 0, 50).unwrap();
 
     let alice = env.alice.insecure_clone();
     let res = env.lower_fees_as(&basket, &alice, 10, 10, 10);
@@ -518,14 +518,14 @@ fn lower_fees_rejects_any_single_increase() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 50, 50, 100).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 25, 0, 50).unwrap();
 
-    // Lowering mint/redeem but raising streaming must fail as a whole.
-    let res = env.lower_fees(&basket, 10, 10, 101);
+    // Lowering the mint fee but raising streaming must fail as a whole.
+    let res = env.lower_fees(&basket, 10, 0, 51);
     assert_etf_error(res, EtfError::FeeIncreaseNotAllowed);
     // Nothing should have been written on the rejected call.
     let b = env.basket_account(basket.key);
-    assert_eq!((b.mint_fee_bps, b.redeem_fee_bps, b.streaming_fee_bps), (50, 50, 100));
+    assert_eq!((b.mint_fee_bps, b.redeem_fee_bps, b.streaming_fee_bps), (25, 0, 50));
 }
 
 // ---------------------------------------------------------------------------
@@ -549,7 +549,7 @@ fn accrue_fees_twice_in_the_same_instant_mints_nothing_the_second_time() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 0, 0, 200).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 0, 0, 50).unwrap();
 
     let manager_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.manager));
     env.seed_basket(

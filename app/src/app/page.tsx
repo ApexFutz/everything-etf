@@ -165,7 +165,7 @@ export default function Home() {
               <tbody className="divide-y divide-border bg-surface">
                 {[
                   ["Mint", "Basket manager", formatBps(MAX_MINT_FEE_BPS)],
-                  ["Redeem", "Basket manager", formatBps(MAX_REDEEM_FEE_BPS)],
+                  ["Redeem", "Nobody — always free", formatBps(MAX_REDEEM_FEE_BPS)],
                   ["Streaming (annual)", "Basket manager", `${formatBps(MAX_STREAMING_FEE_BPS)} / year`],
                   ["Protocol share of all fees", "Protocol, locked in per basket at creation", formatBps(MAX_PROTOCOL_SHARE_BPS)],
                 ].map(([fee, who, cap]) => (
@@ -182,6 +182,13 @@ export default function Home() {
             Every payout splits <strong>75% cash leg / 25% basket tokens</strong>. Fees accrue as
             basket tokens in an escrow owned by the basket itself, and the claim amount is fixed by
             on-chain ledgers — there is no discretionary withdrawal.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            These caps sit below the comparable market on purpose. Minting and redeeming at true
+            value is the mechanism that keeps a basket&apos;s price tracking the coins inside it, and
+            every basis point charged there widens the gap the price can drift before closing it
+            becomes worth anyone&apos;s while — so redeeming is free and minting is capped at a
+            quarter percent, with the annual fee carrying the economics instead.
           </p>
         </Section>
 

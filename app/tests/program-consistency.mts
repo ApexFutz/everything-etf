@@ -56,6 +56,20 @@ if (!declaredId) throw new Error(`could not parse declare_id! out of ${LIB_RS}`)
 const PROGRAM_ID = new PublicKey(declaredId);
 process.env.NEXT_PUBLIC_ETF_PROGRAM_ID = PROGRAM_ID.toBase58();
 
+/**
+ * Fee caps live in constants.rs and are mirrored by hand in the TS client,
+ * where the launch form uses them to label its inputs. A mirror that drifts
+ * means the UI offers a fee the program will reject, so the real values are
+ * parsed back out of the Rust source and compared.
+ */
+const CONSTANTS_RS = path.join(here, "..", "..", "programs", "everything-etf", "src", "constants.rs");
+function rustU16(name: string): number {
+  const src = readFileSync(CONSTANTS_RS, "utf-8");
+  const m = src.match(new RegExp(`pub const ${name}: u16 = ([0-9_]+)`));
+  if (!m) throw new Error(`could not parse ${name} out of ${CONSTANTS_RS}`);
+  return Number(m[1].replace(/_/g, ""));
+}
+
 const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 const BPF_LOADER_UPGRADEABLE_ID = new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111");
 
@@ -158,7 +172,7 @@ async function main() {
 
   // --- initialize_config -------------------------------------------------
   const treasury = authority.publicKey;
-  const creationFeeLamports = 250_000_000n;
+  const creationFeeLamports = 100_000_000n;
   const protocolShareBps = 1000;
   await send(
     svm,
@@ -285,6 +299,21 @@ async function main() {
   assert.equal(written?.name, "Test Frog", "round-tripped metadata name");
   assert.equal(written?.symbol, "TFROG", "round-tripped metadata symbol");
   console.log("OK  hand-built CreateMetadataAccountV3 round-trips through Metaplex");
+
+  // ---------------------------------------------------------------------
+  // 8. The TS fee caps still match the Rust ones.
+  // ---------------------------------------------------------------------
+  const caps = await import("../src/lib/etf/constants.js");
+  const { MAX_MINT_FEE_BPS, MAX_REDEEM_FEE_BPS, MAX_STREAMING_FEE_BPS, MAX_PROTOCOL_SHARE_BPS } = caps;
+  for (const [name, ts] of [
+    ["MAX_MINT_FEE_BPS", MAX_MINT_FEE_BPS],
+    ["MAX_REDEEM_FEE_BPS", MAX_REDEEM_FEE_BPS],
+    ["MAX_STREAMING_FEE_BPS", MAX_STREAMING_FEE_BPS],
+    ["MAX_PROTOCOL_SHARE_BPS", MAX_PROTOCOL_SHARE_BPS],
+  ] as const) {
+    assert.equal(ts, rustU16(name), `${name} drifted between constants.rs and constants.ts`);
+  }
+  console.log("OK  TS fee caps match constants.rs");
 
   console.log("\nAll program-consistency checks passed.");
 }
