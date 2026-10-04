@@ -1,167 +1,292 @@
-"use client";
-
-import { useConnection } from "@solana/wallet-adapter-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { BasketWithKey, fetchCoinConfig, fetchConfig, listBasketsPage } from "@/lib/etf/client";
-import { Config, CoinConfig } from "@/lib/etf/accounts";
-import { COIN_DECIMALS, COIN_TOTAL_SUPPLY } from "@/lib/etf/constants";
-import { formatBaseUnits, formatBps } from "@/lib/format";
-import { AddressLink, Banner, Button, Card, Stat } from "@/components/ui";
-
-const PAGE_SIZE = 10;
+import { LiveStats } from "@/components/LiveStats";
+import { Banner, ButtonLink, Card, Pill, Section } from "@/components/ui";
+import {
+  COIN_TOTAL_SUPPLY,
+  MAX_ASSETS,
+  MAX_MINT_FEE_BPS,
+  MAX_PROTOCOL_SHARE_BPS,
+  MAX_REDEEM_FEE_BPS,
+  MAX_STREAMING_FEE_BPS,
+  MIN_ASSETS,
+  MIN_CREATION_BURN_BPS,
+} from "@/lib/etf/constants";
+import { formatBps, formatTokens } from "@/lib/format";
 
 export default function Home() {
-  const { connection } = useConnection();
-  const [config, setConfig] = useState<Config | null>(null);
-  const [coinConfig, setCoinConfig] = useState<CoinConfig | null>(null);
-  const [baskets, setBaskets] = useState<BasketWithKey[]>([]);
-  const [nextBefore, setNextBefore] = useState<bigint | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      try {
-        const [cfg, coin, page] = await Promise.all([
-          fetchConfig(connection),
-          fetchCoinConfig(connection),
-          listBasketsPage(connection, { pageSize: PAGE_SIZE }),
-        ]);
-        if (cancelled) return;
-        setConfig(cfg);
-        setCoinConfig(coin);
-        setBaskets(page.baskets);
-        setNextBefore(page.nextBefore);
-        setError(null);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [connection]);
-
-  async function loadMore() {
-    if (nextBefore === null) return;
-    setLoadingMore(true);
-    try {
-      const page = await listBasketsPage(connection, { before: nextBefore, pageSize: PAGE_SIZE });
-      setBaskets((prev) => [...prev, ...page.baskets]);
-      setNextBefore(page.nextBefore);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  if (loading) return <p className="text-sm text-zinc-500">Loading protocol state…</p>;
-
-  if (error) {
-    return (
-      <Banner kind="error">
-        Couldn&apos;t reach the RPC endpoint or decode the program&apos;s accounts: {error}
-      </Banner>
-    );
-  }
-
-  if (!config || !coinConfig) {
-    return (
-      <Banner kind="info">
-        The program isn&apos;t initialized on this cluster yet (no <code>Config</code> /{" "}
-        <code>CoinConfig</code> account found at the expected address). Visit{" "}
-        <Link href="/admin" className="underline">
-          Admin
-        </Link>{" "}
-        to run <code>initialize_config</code> and <code>initialize_coin</code>.
-      </Banner>
-    );
-  }
-
   return (
-    <div className="space-y-8">
-      <section className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">Protocol</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <Stat label="Baskets created" value={config.basketCount.toString()} />
-            <Stat label="Protocol fee share" value={formatBps(config.protocolShareBps)} />
-            <Stat
-              label="Creation fee (SOL)"
-              value={formatBaseUnits(config.creationFeeLamports, 9)}
-            />
-            <Stat label="Treasury" value={<AddressLink address={config.treasury.toBase58()} />} />
+    <div className="mx-auto max-w-6xl px-6">
+      {/* ---------------------------------------------------------------- hero */}
+      <section className="grid items-center gap-10 py-14 lg:grid-cols-[1.15fr_1fr] lg:py-20">
+        <div>
+          <Pill tone="warn">Pre-audit · devnet only</Pill>
+          <h1 className="mt-4 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
+            Equal-weight basket tokens,
+            <br />
+            <span className="text-accent">launched by anyone.</span>
+          </h1>
+          <p className="mt-5 max-w-xl text-base leading-relaxed text-muted">
+            Bundle {MIN_ASSETS}–{MAX_ASSETS} Solana tokens into one tradeable basket. Mint and redeem
+            in kind at NAV, so the basket is always backed by exactly what it holds — and every
+            launch permanently burns $EETF supply.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <ButtonLink href="/baskets">Browse baskets</ButtonLink>
+            <ButtonLink href="/baskets/new" variant="secondary">
+              Launch a basket
+            </ButtonLink>
           </div>
-        </Card>
-        <Card>
-          <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">$EETF</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <Stat
-              label="Circulating"
-              value={formatBaseUnits(COIN_TOTAL_SUPPLY - coinConfig.totalBurned, COIN_DECIMALS)}
-            />
-            <Stat label="Lifetime burned" value={formatBaseUnits(coinConfig.totalBurned, COIN_DECIMALS)} />
-            <Stat label="Dev fees paid" value={formatBaseUnits(coinConfig.totalDevFees, COIN_DECIMALS)} />
-            <Stat label="Baskets funded" value={coinConfig.basketsFunded.toString()} />
-            <Stat
-              label="Creation fee"
-              value={`${formatBaseUnits(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF`}
-            />
-          </div>
-        </Card>
+          <p className="mt-4 text-xs text-muted">
+            Running on devnet. You&apos;ll need a wallet set to devnet — the create page can mint you
+            test tokens to build a basket from.
+          </p>
+        </div>
+        <BasketDiagram />
       </section>
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-            Baskets ({baskets.length} of {config.basketCount.toString()})
-          </h2>
-          <Link href="/baskets/new" className="text-sm underline">
-            + Create a basket
-          </Link>
-        </div>
-        {baskets.length === 0 ? (
-          <Card>
-            <p className="text-sm text-zinc-500">No baskets yet. Be the first to launch one.</p>
-          </Card>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {baskets.map((b) => (
-              <Link key={b.pubkey.toBase58()} href={`/baskets/${b.id}`}>
-                <Card className="transition-colors hover:border-black/30 dark:hover:border-white/30">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">Basket #{b.id.toString()}</span>
-                    <span className="text-xs text-zinc-500">{b.assets.length} assets</span>
-                  </div>
-                  <div className="mt-2 text-xs text-zinc-500">
-                    Manager: <AddressLink address={b.manager.toBase58()} />
-                  </div>
-                  <div className="mt-1 flex gap-3 text-xs text-zinc-500">
-                    <span>mint {formatBps(b.mintFeeBps)}</span>
-                    <span>redeem {formatBps(b.redeemFeeBps)}</span>
-                    <span>stream {formatBps(b.streamingFeeBps)}/yr</span>
-                  </div>
+      <LiveStats />
+
+      <div className="mt-6">
+        <Banner kind="warn">
+          <strong>Not audited, and not for real funds.</strong> The fee and share math is unit-tested
+          and the whole protocol is exercised end-to-end against the compiled program in CI, but it
+          has had no security review. The deployment&apos;s upgrade authority is also still a single
+          hot wallet, which means whoever holds it could change every rule below.
+        </Banner>
+      </div>
+
+      <div className="space-y-16 py-16">
+        {/* ------------------------------------------------------ how it works */}
+        <Section
+          id="how-it-works"
+          title="How a basket works"
+          lead="No oracles, no price feeds, no trusted pricing step. Everything is priced by the vault's own contents."
+        >
+          <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                step: "01",
+                title: "Create",
+                body: `A manager picks ${MIN_ASSETS}–${MAX_ASSETS} existing SPL or Token-2022 mints and sets the basket's fees, under hard caps the program enforces.`,
+              },
+              {
+                step: "02",
+                title: "Seed",
+                body: "The manager makes the first deposit and receives the first basket tokens, setting the starting supply. Only they can seed, which blocks first-depositor share attacks.",
+              },
+              {
+                step: "03",
+                title: "Mint & redeem",
+                body: "Anyone deposits every underlying pro-rata to mint at NAV, or burns basket tokens to redeem their share of each one. Always in kind.",
+              },
+              {
+                step: "04",
+                title: "Arbitrage",
+                body: "A basket/SOL pool makes it buyable anywhere Solana tokens trade. Arbitrageurs mint when the pool trades above NAV and redeem when below, holding the peg.",
+              },
+            ].map((s) => (
+              <li key={s.step}>
+                <Card className="h-full">
+                  <div className="font-mono text-xs text-accent">{s.step}</div>
+                  <h3 className="mt-2 font-semibold">{s.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
                 </Card>
-              </Link>
+              </li>
             ))}
+          </ol>
+        </Section>
+
+        {/* ------------------------------------------------------------- $EETF */}
+        <Section
+          id="eetf"
+          title="$EETF: the launchpad working is the tokenomics"
+          lead="One fixed-supply coin for the whole protocol. No inflation schedule, no staking emissions, no rebase — after genesis, the only supply event is a burn."
+        >
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card>
+              <h3 className="font-semibold">Fixed at genesis</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                {formatTokens(COIN_TOTAL_SUPPLY, 9)} EETF minted once, inside{" "}
+                <code className="text-xs">initialize_coin</code>, which revokes the mint authority in
+                the same transaction and fails if it isn&apos;t actually gone. Supply can only ever
+                fall.
+              </p>
+            </Card>
+            <Card>
+              <h3 className="font-semibold">Every launch burns</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                Creating a basket costs $EETF. At least{" "}
+                <strong className="text-burn">{formatBps(MIN_CREATION_BURN_BPS)}</strong> of that fee
+                is burned on the spot — a floor the protocol authority cannot lower — and the rest
+                funds development.
+              </p>
+            </Card>
+            <Card>
+              <h3 className="font-semibold">A one-way burn vault</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                Anyone can send $EETF to the burn vault, and the only instruction that moves it again
+                destroys it. Cranking that burn is permissionless: the only possible outcome is a
+                smaller supply.
+              </p>
+            </Card>
           </div>
-        )}
-        {nextBefore !== null && (
+
+          <Card className="mt-4 border-dashed">
+            <h3 className="font-semibold">What the coin deliberately is not</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              $EETF does <strong>not</strong> entitle holders to any share of fees, is{" "}
+              <strong>not</strong> required to hold or trade a basket token, and does{" "}
+              <strong>not</strong> vote on anything. Adding a revenue share or governance raises a
+              securities question that belongs with a lawyer before it belongs in code.
+            </p>
+          </Card>
+
           <div className="mt-4">
-            <Button variant="secondary" disabled={loadingMore} onClick={loadMore}>
-              {loadingMore ? "Loading…" : "Load more"}
-            </Button>
+            <Link href="/eetf" className="text-sm text-accent underline decoration-dotted underline-offset-2">
+              See live supply and burn figures →
+            </Link>
           </div>
-        )}
-      </section>
+        </Section>
+
+        {/* --------------------------------------------------------- fee model */}
+        <Section
+          title="Fees, and the caps on them"
+          lead="Managers set their own fees but can never exceed limits hardcoded in the program. They can lower them instantly; raising them above a cap is impossible, not merely discouraged."
+        >
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <table className="w-full min-w-[32rem] text-sm">
+              <thead className="bg-surface-2 text-left text-xs uppercase tracking-wide text-muted">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">Fee</th>
+                  <th className="px-4 py-2.5 font-medium">Set by</th>
+                  <th className="px-4 py-2.5 font-medium">Hard cap</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border bg-surface">
+                {[
+                  ["Mint", "Basket manager", formatBps(MAX_MINT_FEE_BPS)],
+                  ["Redeem", "Basket manager", formatBps(MAX_REDEEM_FEE_BPS)],
+                  ["Streaming (annual)", "Basket manager", `${formatBps(MAX_STREAMING_FEE_BPS)} / year`],
+                  ["Protocol share of all fees", "Protocol, locked in per basket at creation", formatBps(MAX_PROTOCOL_SHARE_BPS)],
+                ].map(([fee, who, cap]) => (
+                  <tr key={fee}>
+                    <td className="px-4 py-2.5 font-medium">{fee}</td>
+                    <td className="px-4 py-2.5 text-muted">{who}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{cap}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            Every payout splits <strong>75% cash leg / 25% basket tokens</strong>. Fees accrue as
+            basket tokens in an escrow owned by the basket itself, and the claim amount is fixed by
+            on-chain ledgers — there is no discretionary withdrawal.
+          </p>
+        </Section>
+
+        {/* ------------------------------------------------------ asset safety */}
+        <Section
+          title="What a basket refuses to hold"
+          lead="A vault you can't exit is worse than no vault. These are rejected at creation, not flagged after."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card>
+              <h3 className="font-semibold">Freeze authorities</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                Any mint with a freeze authority is rejected outright: whoever held it could freeze
+                the basket&apos;s vault and trap every holder&apos;s assets inside.
+              </p>
+            </Card>
+            <Card>
+              <h3 className="font-semibold">Hostile Token-2022 extensions</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                Transfer fees break pro-rata accounting, permanent delegates can drain a vault, and
+                transfer hooks can block exits. Only metadata and group pointers are allowed through.
+              </p>
+            </Card>
+          </div>
+        </Section>
+
+        {/* --------------------------------------------------------------- cta */}
+        <section className="rounded-2xl border border-border bg-surface-2 px-6 py-10 text-center">
+          <h2 className="text-2xl font-semibold tracking-tight">Launch one on devnet</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted">
+            The create page can mint you a set of test tokens, so you can go from nothing to a live,
+            mintable basket in a couple of transactions.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <ButtonLink href="/baskets/new">Launch a basket</ButtonLink>
+            <ButtonLink href="/baskets" variant="secondary">
+              Browse existing
+            </ButtonLink>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/** N underlying assets converging into a single basket token. */
+function BasketDiagram() {
+  const assets = [
+    { cy: 26, label: "A" },
+    { cy: 76, label: "B" },
+    { cy: 126, label: "C" },
+    { cy: 176, label: "D" },
+  ];
+  return (
+    <div className="relative">
+      <svg
+        viewBox="0 0 340 210"
+        className="w-full"
+        role="img"
+        aria-label="Four underlying assets, each one quarter of the basket, combining into a single basket token"
+      >
+        {assets.map((a, i) => (
+          <g key={a.label}>
+            <path
+              d={`M 74 ${a.cy} C 140 ${a.cy}, 150 105, 214 105`}
+              fill="none"
+              stroke="var(--border-strong)"
+              strokeWidth="1.5"
+            />
+            <circle cx="46" cy={a.cy} r="22" fill="var(--surface)" stroke="var(--border-strong)" strokeWidth="1.5" />
+            <text
+              x="46"
+              y={a.cy + 4}
+              textAnchor="middle"
+              className="fill-[var(--muted)] font-mono"
+              fontSize="11"
+            >
+              1/{assets.length}
+            </text>
+            <text x="46" y={a.cy - 30} textAnchor="middle" className="fill-[var(--muted)]" fontSize="9">
+              {`Asset ${a.label}`}
+            </text>
+            <circle cx="214" cy="105" r="3" fill="var(--accent)" opacity={0.25 + i * 0.25} />
+          </g>
+        ))}
+        <rect
+          x="232"
+          y="69"
+          width="86"
+          height="72"
+          rx="14"
+          fill="var(--accent-soft)"
+          stroke="var(--accent)"
+          strokeWidth="1.5"
+        />
+        <text x="275" y="100" textAnchor="middle" className="fill-[var(--accent)] font-semibold" fontSize="12">
+          1 basket
+        </text>
+        <text x="275" y="117" textAnchor="middle" className="fill-[var(--accent)]" fontSize="10">
+          token
+        </text>
+      </svg>
+      <p className="mt-2 text-center text-xs text-muted">
+        Each asset is 1/N of the basket by design. Redeem any time for your share of all of them.
+      </p>
     </div>
   );
 }

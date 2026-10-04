@@ -65,8 +65,20 @@ export default function BasketPage() {
     refresh();
   }, [refresh]);
 
-  if (loading && !basket) return <p className="text-sm text-zinc-500">Loading basket…</p>;
-  if (loadError) return <Banner kind="error">{loadError}</Banner>;
+  if (loading && !basket) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-10">
+        <p className="text-sm text-muted">Loading basket…</p>
+      </div>
+    );
+  }
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-10">
+        <Banner kind="error">{loadError}</Banner>
+      </div>
+    );
+  }
   if (!basket || supply === null) return null;
 
   const isManager = publicKey?.equals(basket.manager) ?? false;
@@ -78,10 +90,10 @@ export default function BasketPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
       <div>
         <h1 className="text-xl font-semibold">Basket #{basket.id.toString()}</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted">
           Manager <AddressLink address={basket.manager.toBase58()} /> · mint{" "}
           <AddressLink address={basket.mint.toBase58()} />
         </p>
@@ -108,7 +120,7 @@ export default function BasketPage() {
           {basket.assets.map((a, i) => (
             <div key={a.toBase58()} className="flex justify-between">
               <AddressLink address={a.toBase58()} chars={6} />
-              <span className="text-zinc-500">{assetDecimals[i]} decimals</span>
+              <span className="text-muted">{assetDecimals[i]} decimals</span>
             </div>
           ))}
         </div>
@@ -125,7 +137,7 @@ export default function BasketPage() {
       )}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">Permissionless</h2>
+        <h2 className="mb-3 text-sm font-semibold text-muted">Permissionless</h2>
         <Button
           variant="secondary"
           disabled={pending}
@@ -233,7 +245,7 @@ function SeedForm({
 
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">Seed this basket</h2>
+      <h2 className="mb-3 text-sm font-semibold text-muted">Seed this basket</h2>
       <form onSubmit={onSubmit} className="space-y-3">
         <Field label="Initial basket-token supply">
           <TextInput value={initialSupply} onChange={(e) => setInitialSupply(e.target.value)} />
@@ -350,7 +362,7 @@ function MintRedeemForm({
 
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+      <h2 className="mb-3 text-sm font-semibold text-muted">
         {kind === "mint" ? "Mint basket tokens" : "Redeem basket tokens"}
       </h2>
       <form onSubmit={onSubmit} className="space-y-3">
@@ -367,7 +379,7 @@ function MintRedeemForm({
           {previewing ? "Quoting…" : kind === "mint" ? "Preview required deposits" : "Preview payout"}
         </Button>
         {preview && (
-          <div className="space-y-1 rounded-lg border border-black/10 p-3 text-xs dark:border-white/10">
+          <div className="space-y-1 rounded-lg border border-border p-3 text-xs">
             {basket.assets.map((a, i) => (
               <div key={a.toBase58()} className="flex justify-between">
                 <span className="font-mono">{a.toBase58().slice(0, 8)}…</span>
@@ -404,7 +416,7 @@ function ClaimCard({
   const { publicKey } = useWallet();
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">{label}</h2>
+      <h2 className="mb-3 text-sm font-semibold text-muted">{label}</h2>
       <Button
         disabled={pending || !publicKey}
         onClick={async () =>
@@ -467,7 +479,7 @@ function LowerFeesForm({
 
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+      <h2 className="mb-3 text-sm font-semibold text-muted">
         Lower fees (never raise)
       </h2>
       <form onSubmit={onSubmit} className="space-y-3">

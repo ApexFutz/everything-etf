@@ -3,7 +3,7 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Banner, Button, Card, Field, TextInput } from "@/components/ui";
+import { Banner, Button, Card, Field, TextArea, TextInput } from "@/components/ui";
 import { createBasketTx, fetchCoinConfig, fetchConfig } from "@/lib/etf/client";
 import { createAndFundTestMints } from "@/lib/etf/devHelpers";
 import { MAX_ASSETS, MAX_MINT_FEE_BPS, MAX_REDEEM_FEE_BPS, MAX_STREAMING_FEE_BPS, MIN_ASSETS } from "@/lib/etf/constants";
@@ -89,9 +89,9 @@ export default function NewBasketPage() {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="mx-auto max-w-xl space-y-6 px-6 py-10">
       <h1 className="text-xl font-semibold">Create a basket</h1>
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-muted">
         Burns the $EETF creation fee from your wallet, then launches an equal-weight basket over
         the assets you list below (2–{MAX_ASSETS}).
       </p>
@@ -144,11 +144,10 @@ export default function NewBasketPage() {
             label={`Asset mints (${assetLines.length})`}
             hint="One SPL/Token-2022 mint address per line (or comma-separated). No freeze authority allowed."
           >
-            <textarea
+            <TextArea
               value={assetsText}
               onChange={(e) => setAssetsText(e.target.value)}
               rows={5}
-              className="w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-black/40 dark:border-white/15 dark:bg-zinc-900 dark:focus:border-white/40"
               placeholder="So11111111111111111111111111111111111111112&#10;..."
             />
           </Field>

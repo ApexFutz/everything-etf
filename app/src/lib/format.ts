@@ -27,6 +27,21 @@ export function parseToBaseUnits(input: string, decimals: number): bigint {
   return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(frac || "0");
 }
 
+/**
+ * Same as {@link formatBaseUnits} but with thousands separators and the
+ * fraction trimmed to `maxFractionDigits` — for display, where
+ * `1,000,000,000` beats `1000000000`. Keep using `formatBaseUnits` anywhere
+ * the exact value matters (form round-trips, assertions).
+ */
+export function formatTokens(amount: bigint, decimals: number, maxFractionDigits = 2): string {
+  const exact = formatBaseUnits(amount, decimals);
+  const [whole, frac = ""] = exact.replace("-", "").split(".");
+  const grouped = BigInt(whole).toLocaleString("en-US");
+  const trimmed = frac.slice(0, maxFractionDigits).replace(/0+$/, "");
+  const sign = amount < 0n ? "-" : "";
+  return trimmed ? `${sign}${grouped}.${trimmed}` : `${sign}${grouped}`;
+}
+
 /** 150 bps -> "1.5%". */
 export function formatBps(bps: number): string {
   return `${(bps / 100).toFixed(2).replace(/\.?0+$/, "")}%`;

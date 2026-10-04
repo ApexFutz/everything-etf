@@ -57,16 +57,16 @@ export default function AdminPage() {
   const isAuthority = (config && publicKey?.equals(config.authority)) ?? false;
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="mx-auto max-w-xl space-y-6 px-6 py-10">
       <h1 className="text-xl font-semibold">Admin</h1>
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+        <h2 className="mb-3 text-sm font-semibold text-muted">
           Program upgrade authority
         </h2>
         <p className="text-sm">
           {upgradeAuthority === undefined ? (
-            <span className="text-zinc-500">No program deployed at this address.</span>
+            <span className="text-muted">No program deployed at this address.</span>
           ) : upgradeAuthority === null ? (
             <span>
               <strong>Immutable</strong> — the upgrade authority has been revoked, so the deployed
@@ -77,7 +77,7 @@ export default function AdminPage() {
           )}
         </p>
         {upgradeAuthority && (
-          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 text-xs text-muted">
             Whoever holds this key can replace the program, and with it every rule below — fee caps
             included. Check it before trusting any basket on this deployment.
           </p>
@@ -98,7 +98,7 @@ export default function AdminPage() {
         <InitializeConfigForm pending={pending} send={send} onDone={after} setError={setError} />
       ) : (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">Config</h2>
+          <h2 className="mb-3 text-sm font-semibold text-muted">Config</h2>
           <dl className="space-y-1 text-sm">
             <Row k="Authority" v={<AddressLink address={config.authority.toBase58()} />} />
             <Row k="Treasury" v={<AddressLink address={config.treasury.toBase58()} />} />
@@ -122,7 +122,7 @@ export default function AdminPage() {
 
       {coinConfig && (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">$EETF</h2>
+          <h2 className="mb-3 text-sm font-semibold text-muted">$EETF</h2>
           <dl className="space-y-1 text-sm">
             <Row k="Mint" v={<AddressLink address={coinConfig.mint.toBase58()} />} />
             <Row k="Dev treasury" v={<AddressLink address={coinConfig.devTreasury.toBase58()} />} />
@@ -159,7 +159,7 @@ export default function AdminPage() {
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-zinc-500">{k}</dt>
+      <dt className="text-muted">{k}</dt>
       <dd>{v}</dd>
     </div>
   );
@@ -198,7 +198,7 @@ function InitializeConfigForm({ pending, send, onDone, setError }: Common) {
 
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+      <h2 className="mb-3 text-sm font-semibold text-muted">
         initialize_config <span className="font-normal">(one-time — program upgrade authority only)</span>
       </h2>
       <form onSubmit={onSubmit} className="space-y-3">
@@ -255,7 +255,7 @@ function InitializeCoinForm({ authority, pending, send, onDone, setError }: Comm
 
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+      <h2 className="mb-3 text-sm font-semibold text-muted">
         initialize_coin <span className="font-normal">(one-time — mints the entire fixed supply)</span>
       </h2>
       <form onSubmit={onSubmit} className="space-y-3">
@@ -316,7 +316,7 @@ function UpdateProtocolTermsForm({ config, pending, send, onDone, setError }: Co
 
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+      <h2 className="mb-3 text-sm font-semibold text-muted">
         update_protocol_terms <span className="font-normal">(future baskets only)</span>
       </h2>
       <form onSubmit={onSubmit} className="space-y-3">
@@ -361,7 +361,7 @@ function UpdateCoinTermsForm({ coinConfig, pending, send, onDone, setError }: Co
 
   return (
     <Card>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+      <h2 className="mb-3 text-sm font-semibold text-muted">
         update_coin_terms <span className="font-normal">(bounded by on-chain hard caps)</span>
       </h2>
       <form onSubmit={onSubmit} className="space-y-3">

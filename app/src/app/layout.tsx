@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Nav } from "@/components/Nav";
+import { Footer } from "@/components/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Everything ETF",
-  description: "Launchpad for equal-weight, on-chain basket tokens on Solana.",
+  title: "Everything ETF — equal-weight basket tokens on Solana",
+  description:
+    "Launch an equal-weight basket of Solana tokens. Mint and redeem in kind at NAV, with every basket launch permanently burning $EETF supply.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -25,10 +27,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-black">
+      <body className="flex min-h-full flex-col">
         <Providers>
           <Nav />
-          <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+          <main className="flex-1">{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>
