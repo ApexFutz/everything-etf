@@ -1,7 +1,6 @@
 "use client";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { getMint } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -20,7 +19,7 @@ import {
   MIN_ASSETS,
 } from "@/lib/etf/constants";
 import { CoinConfig, Config } from "@/lib/etf/accounts";
-import { fetchTokenOptions, TokenOption } from "@/lib/etf/tokens";
+import { checkEligibility, clusterOf, fetchWalletTokens, TokenOption } from "@/lib/etf/tokens";
 import { DEFAULT_RPC_URL } from "@/lib/etf/constants";
 import { explorerTxUrl, formatBps, formatTokens, parseToBaseUnits, shortAddress } from "@/lib/format";
 import { useSendTx } from "@/hooks/useSendTx";
@@ -75,12 +74,13 @@ export default function NewBasketPage() {
     };
   }, [connection]);
 
-  // The pickable set: what the wallet holds (the only tokens that can
-  // actually be seeded) plus well-known mints for this cluster.
+  // Only the wallet's own holdings live here — those are the ones that can
+  // actually be seeded. Searching the wider token universe is the picker's job.
   const loadTokens = useCallback(async () => {
+    if (!publicKey) return [];
     setTokensLoading(true);
     try {
-      const options = await fetchTokenOptions(connection, publicKey ?? null, DEFAULT_RPC_URL);
+      const options = await fetchWalletTokens(connection, publicKey);
       setTokenOptions(options);
       return options;
     } finally {
@@ -89,9 +89,10 @@ export default function NewBasketPage() {
   }, [connection, publicKey]);
 
   useEffect(() => {
+    if (!publicKey) return;
     let cancelled = false;
     (async () => {
-      const options = await fetchTokenOptions(connection, publicKey ?? null, DEFAULT_RPC_URL);
+      const options = await fetchWalletTokens(connection, publicKey);
       if (!cancelled) setTokenOptions(options);
     })();
     return () => {
@@ -100,22 +101,25 @@ export default function NewBasketPage() {
   }, [connection, publicKey]);
 
   /**
-   * A picked token still needs its real decimals: options sourced from the
-   * wallet already carry them, but a pasted address arrives with none, so it
-   * gets resolved here — which doubles as validation that it's a mint at all.
+   * Every pick is checked against the chain before it lands in the basket:
+   * it has to exist here, be a token mint, and have no freeze authority —
+   * which the program rejects outright. Better to say so now than to let the
+   * launch transaction revert at the end.
    */
   async function addAsset(token: TokenOption) {
     setAssetError(null);
     const key = token.mint.toBase58();
     if (assets.some((a) => a.address.toBase58() === key)) return;
-    try {
-      const decimals = token.owned ? token.decimals : (await getMint(connection, token.mint)).decimals;
-      setAssets((prev) => [...prev, { address: token.mint, decimals, symbol: token.symbol }]);
-      setAmounts((prev) => ({ ...prev, [key]: prev[key] ?? "1000" }));
-      setSelectedTokens((prev) => [...prev, { ...token, decimals }]);
-    } catch {
-      setAssetError(`${key.slice(0, 8)}… isn't a token mint on this cluster.`);
+
+    const result = await checkEligibility(connection, token.mint);
+    if ("error" in result) {
+      setAssetError(`${token.symbol || key.slice(0, 8)}: ${result.error}`);
+      return;
     }
+    const { decimals } = result;
+    setAssets((prev) => [...prev, { address: token.mint, decimals, symbol: token.symbol }]);
+    setAmounts((prev) => ({ ...prev, [key]: prev[key] ?? "1000" }));
+    setSelectedTokens((prev) => [...prev, { ...token, decimals }]);
   }
 
   function removeAsset(mint: PublicKey) {
@@ -255,8 +259,9 @@ export default function NewBasketPage() {
             hint={`Search by ticker or name. ${MIN_ASSETS}–${MAX_ASSETS} tokens, each an equal 1/N share.`}
           >
             <TokenPicker
-              options={tokenOptions}
+              walletTokens={tokenOptions}
               selected={selectedTokens}
+              cluster={clusterOf(DEFAULT_RPC_URL)}
               loading={tokensLoading}
               onAdd={addAsset}
               onRemove={removeAsset}
