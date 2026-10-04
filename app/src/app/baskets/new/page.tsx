@@ -5,7 +5,8 @@ import { getMint } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Banner, Button, Card, Field, Pill, TextArea, TextInput } from "@/components/ui";
+import { Banner, Button, Card, Field, Pill, TextInput } from "@/components/ui";
+import { TokenPicker } from "@/components/TokenPicker";
 import { createBasketTx, fetchCoinConfig, fetchConfig, seedBasketTx } from "@/lib/etf/client";
 import { estimateCreateCost, CreateCostEstimate } from "@/lib/etf/costs";
 import { createAndFundTestMints } from "@/lib/etf/devHelpers";
@@ -19,6 +20,8 @@ import {
   MIN_ASSETS,
 } from "@/lib/etf/constants";
 import { CoinConfig, Config } from "@/lib/etf/accounts";
+import { fetchTokenOptions, TokenOption } from "@/lib/etf/tokens";
+import { DEFAULT_RPC_URL } from "@/lib/etf/constants";
 import { explorerTxUrl, formatBps, formatTokens, parseToBaseUnits, shortAddress } from "@/lib/format";
 import { useSendTx } from "@/hooks/useSendTx";
 
@@ -29,7 +32,7 @@ import { useSendTx } from "@/hooks/useSendTx";
  */
 const INITIAL_SUPPLY_TOKENS = 1_000_000n;
 
-type Asset = { address: PublicKey; decimals: number };
+type Asset = { address: PublicKey; decimals: number; symbol: string };
 
 export default function NewBasketPage() {
   const { connection } = useConnection();
@@ -39,10 +42,12 @@ export default function NewBasketPage() {
 
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
-  const [assetsText, setAssetsText] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [tokenOptions, setTokenOptions] = useState<TokenOption[]>([]);
+  const [tokensLoading, setTokensLoading] = useState(false);
+  const [selectedTokens, setSelectedTokens] = useState<TokenOption[]>([]);
 
   const [config, setConfig] = useState<Config | null>(null);
   const [coinConfig, setCoinConfig] = useState<CoinConfig | null>(null);
@@ -70,46 +75,54 @@ export default function NewBasketPage() {
     };
   }, [connection]);
 
-  // Resolve pasted addresses into real mints — the deposit amounts need each
-  // one's decimals, and catching a bad address here beats failing mid-launch.
-  const resolveAssets = useCallback(
-    async (text: string) => {
-      const parts = text
-        .split(/[\s,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (parts.length === 0) {
-        setAssets([]);
-        setAssetError(null);
-        return;
-      }
-      try {
-        const keys = parts.map((p) => new PublicKey(p));
-        const resolved = await Promise.all(
-          keys.map(async (address) => ({
-            address,
-            decimals: (await getMint(connection, address)).decimals,
-          })),
-        );
-        setAssets(resolved);
-        setAmounts((prev) => {
-          const next: Record<string, string> = {};
-          for (const a of resolved) next[a.address.toBase58()] = prev[a.address.toBase58()] ?? "1000";
-          return next;
-        });
-        setAssetError(null);
-      } catch {
-        setAssets([]);
-        setAssetError("One of those addresses isn't a token mint on this cluster.");
-      }
-    },
-    [connection],
-  );
+  // The pickable set: what the wallet holds (the only tokens that can
+  // actually be seeded) plus well-known mints for this cluster.
+  const loadTokens = useCallback(async () => {
+    setTokensLoading(true);
+    try {
+      const options = await fetchTokenOptions(connection, publicKey ?? null, DEFAULT_RPC_URL);
+      setTokenOptions(options);
+      return options;
+    } finally {
+      setTokensLoading(false);
+    }
+  }, [connection, publicKey]);
 
   useEffect(() => {
-    const t = setTimeout(() => void resolveAssets(assetsText), 400);
-    return () => clearTimeout(t);
-  }, [assetsText, resolveAssets]);
+    let cancelled = false;
+    (async () => {
+      const options = await fetchTokenOptions(connection, publicKey ?? null, DEFAULT_RPC_URL);
+      if (!cancelled) setTokenOptions(options);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, publicKey]);
+
+  /**
+   * A picked token still needs its real decimals: options sourced from the
+   * wallet already carry them, but a pasted address arrives with none, so it
+   * gets resolved here — which doubles as validation that it's a mint at all.
+   */
+  async function addAsset(token: TokenOption) {
+    setAssetError(null);
+    const key = token.mint.toBase58();
+    if (assets.some((a) => a.address.toBase58() === key)) return;
+    try {
+      const decimals = token.owned ? token.decimals : (await getMint(connection, token.mint)).decimals;
+      setAssets((prev) => [...prev, { address: token.mint, decimals, symbol: token.symbol }]);
+      setAmounts((prev) => ({ ...prev, [key]: prev[key] ?? "1000" }));
+      setSelectedTokens((prev) => [...prev, { ...token, decimals }]);
+    } catch {
+      setAssetError(`${key.slice(0, 8)}… isn't a token mint on this cluster.`);
+    }
+  }
+
+  function removeAsset(mint: PublicKey) {
+    const key = mint.toBase58();
+    setAssets((prev) => prev.filter((a) => a.address.toBase58() !== key));
+    setSelectedTokens((prev) => prev.filter((t) => t.mint.toBase58() !== key));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +149,15 @@ export default function NewBasketPage() {
     try {
       const { instructions, mints } = await createAndFundTestMints(connection, publicKey, publicKey, 3);
       const sig = await send(instructions, mints);
-      if (sig) setAssetsText(mints.map((m) => m.publicKey.toBase58()).join("\n"));
+      if (sig) {
+        // They're in the wallet now, so they show up in the picker — and
+        // preselect them, since minting them is a clear signal of intent.
+        const options = await loadTokens();
+        const minted = new Set(mints.map((m) => m.publicKey.toBase58()));
+        for (const option of options.filter((o) => minted.has(o.mint.toBase58()))) {
+          await addAsset(option);
+        }
+      }
     } finally {
       setMinting(false);
     }
@@ -231,13 +252,15 @@ export default function NewBasketPage() {
         <Card className="space-y-3">
           <Field
             label="Tokens in the basket"
-            hint="One mint address per line. Each token is an equal 1/N share of the basket."
+            hint={`Search by ticker or name. ${MIN_ASSETS}–${MAX_ASSETS} tokens, each an equal 1/N share.`}
           >
-            <TextArea
-              value={assetsText}
-              onChange={(e) => setAssetsText(e.target.value)}
-              rows={4}
-              placeholder="Paste token mint addresses, one per line"
+            <TokenPicker
+              options={tokenOptions}
+              selected={selectedTokens}
+              loading={tokensLoading}
+              onAdd={addAsset}
+              onRemove={removeAsset}
+              max={MAX_ASSETS}
             />
           </Field>
           <div className="flex flex-wrap items-center gap-3">
@@ -268,7 +291,10 @@ export default function NewBasketPage() {
                 const key = a.address.toBase58();
                 return (
                   <div key={key} className="flex items-center gap-3">
-                    <code className="w-28 shrink-0 text-xs text-muted">{shortAddress(key, 5)}</code>
+                    <div className="w-28 shrink-0">
+                      <div className="text-sm font-medium">{a.symbol}</div>
+                      <code className="text-xs text-muted">{shortAddress(key, 4)}</code>
+                    </div>
                     <TextInput
                       value={amounts[key] ?? ""}
                       onChange={(e) => setAmounts((p) => ({ ...p, [key]: e.target.value }))}
@@ -301,7 +327,7 @@ export default function NewBasketPage() {
                   {assets.map((a) => (
                     <div key={a.address.toBase58()} className="tabular-nums">
                       {amounts[a.address.toBase58()] || "0"}{" "}
-                      <span className="text-muted">{shortAddress(a.address.toBase58(), 4)}</span>
+                      <span className="text-muted">{a.symbol}</span>
                     </div>
                   ))}
                 </div>

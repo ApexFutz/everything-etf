@@ -237,6 +237,55 @@ async function main() {
   assert.equal((await fetchCoinConfig(shimConnection))?.creationBurnBps, creationBurnBps);
   console.log("OK  client.ts's fetchConfig/fetchCoinConfig agree with the direct decode");
 
+  // --- Metaplex metadata ---------------------------------------------------
+  // The token picker reads names/symbols off metadata accounts, and the dev
+  // helper writes them with a hand-rolled CreateMetadataAccountV3 encoding
+  // (no Metaplex JS SDK here). Both sides are checked against the real
+  // Metaplex program rather than trusted.
+  const { decodeMetadata, metadataPda, createMetadataV3Instruction } = await import(
+    "../src/lib/etf/metadata.js"
+  );
+
+  // Decoder: against metadata the *program* wrote for $EETF via its own CPI.
+  const coinMeta = decodeMetadata(getAccountData(svm, metadataPda(coinMintPda()[0])));
+  assert.equal(coinMeta?.name, "Everything ETF", "decoded $EETF metadata name");
+  assert.equal(coinMeta?.symbol, "EETF", "decoded $EETF metadata symbol");
+  console.log("OK  metadata decoder reads what the program's own CPI wrote");
+
+  // Encoder: our instruction, sent to the real Metaplex program, read back.
+  const { MINT_SIZE, TOKEN_PROGRAM_ID, createInitializeMint2Instruction } = await import(
+    "@solana/spl-token"
+  );
+  const { SystemProgram } = await import("@solana/web3.js");
+  const testMint = Keypair.generate();
+  await send(
+    svm,
+    [
+      SystemProgram.createAccount({
+        fromPubkey: authority.publicKey,
+        newAccountPubkey: testMint.publicKey,
+        space: MINT_SIZE,
+        lamports: Number(svm.minimumBalanceForRentExemption(BigInt(MINT_SIZE))),
+        programId: TOKEN_PROGRAM_ID,
+      }),
+      createInitializeMint2Instruction(testMint.publicKey, 9, authority.publicKey, null),
+      createMetadataV3Instruction({
+        mint: testMint.publicKey,
+        mintAuthority: authority.publicKey,
+        payer: authority.publicKey,
+        updateAuthority: authority.publicKey,
+        name: "Test Frog",
+        symbol: "TFROG",
+        uri: "",
+      }),
+    ],
+    [authority, testMint],
+  );
+  const written = decodeMetadata(getAccountData(svm, metadataPda(testMint.publicKey)));
+  assert.equal(written?.name, "Test Frog", "round-tripped metadata name");
+  assert.equal(written?.symbol, "TFROG", "round-tripped metadata symbol");
+  console.log("OK  hand-built CreateMetadataAccountV3 round-trips through Metaplex");
+
   console.log("\nAll program-consistency checks passed.");
 }
 
