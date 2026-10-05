@@ -93,6 +93,32 @@ and discretionary — it is a policy, not a guarantee the program enforces.**
 `baskets_funded`) and every burn emits an event, so circulating supply and
 lifetime burn are both verifiable without trusting a dashboard.
 
+### Adding a new $EETF sink
+
+Basket creation is the first use of $EETF, not the only planned one. Anything
+that burns $EETF **must** go through `utils::burn_coin`, which performs the CPI,
+reloads the mint, and increments `total_burned` as one unit. Do not call
+`token::burn` on the coin mint directly.
+
+`total_burned` is not a dashboard counter. It is the meter every claim about the
+supply rests on, and it is intended to gate how fast locked allocations may be
+released, so a burn that doesn't increment it is a burn that didn't happen as
+far as the protocol is concerned. The opposite mistake matters too:
+`redeem_basket` and `claim_fees` both call `token::burn` on a *basket* mint, and
+those must never touch this counter.
+
+`total_burned_accounts_for_every_coin_that_left_the_supply` in
+`tests-e2e/tests/lifecycle.rs` enforces this. It runs every path that burns
+anything and asserts `total_burned == COIN_TOTAL_SUPPLY - supply`, so it fails
+in both directions — an uncounted coin burn and a wrongly-counted basket-token
+burn. If you add a sink and that test goes red, the sink is wrong, not the test.
+
+One caveat for a sink that **locks or stakes** $EETF rather than burning it:
+locked float and burned supply compound against a fixed supply, which squeezes
+the tradeable float and drives the price up — and every fee quoted as a fixed
+number of coins then gets more expensive at once. Price such a sink against a
+dollar target, the way the creation fee is (see the fee model below).
+
 ### What the coin deliberately is not
 
 It does not entitle holders to fees, it is not required to hold or trade a

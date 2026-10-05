@@ -6,7 +6,7 @@
 //! streaming-fee accrual, and manager/protocol fee claims — plus a few
 //! guard rails (fee caps, frozen-mint rejection, slippage).
 
-use everything_etf::constants::MAX_MINT_FEE_BPS;
+use everything_etf::constants::{COIN_TOTAL_SUPPLY, MAX_MINT_FEE_BPS};
 use everything_etf::errors::EtfError;
 use everything_etf::state::FeeRecipient;
 use tests_e2e::*;
@@ -176,6 +176,102 @@ fn full_basket_lifecycle() {
     assert_eq!(env.basket_account(basket.key).mint_fee_bps, 10);
     let raise = env.lower_fees(&basket, 20, 0, 25);
     assert_etf_error(raise, EtfError::FeeIncreaseNotAllowed);
+}
+
+/// `CoinConfig.total_burned` must equal exactly the $EETF that has left the
+/// supply — no more, no less — after a run that burns coins *and* basket tokens
+/// through every path that burns anything.
+///
+/// This is the invariant `utils::burn_coin` exists to hold, and it's worth a
+/// behavioural test rather than trusting the doc comment, because the counter
+/// is meant to gate how fast locked allocations may be released. It fails in
+/// both directions that matter: a future $EETF sink that burns without
+/// incrementing the counter under-reports, and a basket-token burn
+/// (`redeem_basket`, `claim_fees`) that wrongly increments it over-reports.
+#[test]
+fn total_burned_accounts_for_every_coin_that_left_the_supply() {
+    let mut env = Env::new();
+    let assets = env.with_three_assets();
+    let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
+
+    let check = |env: &Env, label: &str| {
+        let gone = COIN_TOTAL_SUPPLY - env.mint_supply(env.coin_mint);
+        assert_eq!(
+            env.coin_config_account().total_burned, gone,
+            "total_burned diverged from the missing supply after {label}"
+        );
+    };
+    check(&env, "genesis");
+
+    // 1. A basket launch burns coins through the create_basket leg.
+    let (basket, _) = env
+        .create_basket(&assets.mints, manager_coin, 25, 0, 50)
+        .unwrap();
+    check(&env, "create_basket");
+
+    let manager_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.manager));
+    env.seed_basket(
+        &basket,
+        manager_basket_acc,
+        &assets.manager_accounts,
+        1_000 * 1_000_000_000,
+        vec![1_000 * 1_000_000_000; 3],
+    )
+    .unwrap();
+
+    // 2. Minting, then redeeming, burns *basket* tokens. The coin counter must
+    //    not move for any of it.
+    let alice = env.alice.insecure_clone();
+    let alice_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.alice));
+    env.mint_basket(
+        &basket,
+        &alice,
+        alice_basket_acc,
+        &assets.alice_accounts,
+        100 * 1_000_000_000,
+        vec![u64::MAX; 3],
+    )
+    .unwrap();
+    check(&env, "mint_basket");
+
+    // 3. A fee claim also burns basket tokens (the 75% cash leg).
+    env.warp_seconds(90 * 24 * 60 * 60);
+    env.accrue_fees(&basket).unwrap();
+    let manager = env.manager.insecure_clone();
+    env.claim_fees(
+        &basket,
+        &manager,
+        FeeRecipient::Manager,
+        manager_basket_acc,
+        &assets.manager_accounts,
+    )
+    .unwrap();
+    check(&env, "claim_fees");
+
+    let alice_balance = env.token_balance(alice_basket_acc);
+    env.redeem_basket(
+        &basket,
+        &alice,
+        alice_basket_acc,
+        &assets.alice_accounts,
+        alice_balance,
+        vec![0u64; 3],
+    )
+    .unwrap();
+    check(&env, "redeem_basket");
+
+    // 4. And the burn vault, which burns coins through the other leg.
+    let dev_coin_acc = env.dev_coin_account;
+    let dev = env.dev_treasury.insecure_clone();
+    let dev_balance = env.token_balance(dev_coin_acc);
+    assert!(dev_balance > 0, "the creation fee should have paid the dev treasury");
+    env.transfer_tokens(dev_coin_acc, env.burn_vault, &dev, dev_balance);
+    env.crank_burn(&alice).unwrap();
+    check(&env, "crank_burn");
+
+    // Sanity: the run actually burned something, so the assertions above
+    // weren't comparing zero to zero.
+    assert!(env.coin_config_account().total_burned > 0);
 }
 
 #[test]

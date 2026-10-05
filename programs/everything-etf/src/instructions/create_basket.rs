@@ -5,7 +5,7 @@ use anchor_spl::metadata::{
     create_metadata_accounts_v3, mpl_token_metadata::types::DataV2, CreateMetadataAccountsV3,
     Metadata,
 };
-use anchor_spl::token::{self, Burn, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use anchor_spl::token_2022::Token2022;
 
 use crate::constants::*;
@@ -13,7 +13,7 @@ use crate::errors::EtfError;
 use crate::events::{BasketCreated, CreationFeePaid};
 use crate::math;
 use crate::state::{Basket, CoinConfig, Config};
-use crate::utils::{token_program_for, validate_asset_mint};
+use crate::utils::{burn_coin, token_program_for, validate_asset_mint};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct CreateBasketParams {
@@ -177,19 +177,21 @@ pub fn handler<'info>(
     let coin_fee = ctx.accounts.coin_config.creation_fee_coin;
     let (burned, to_dev) =
         math::split_creation_fee(coin_fee, ctx.accounts.coin_config.creation_burn_bps)?;
-    if burned > 0 {
-        token::burn(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                Burn {
-                    mint: ctx.accounts.coin_mint.to_account_info(),
-                    from: ctx.accounts.manager_coin_account.to_account_info(),
-                    authority: ctx.accounts.manager.to_account_info(),
-                },
-            ),
-            burned,
-        )?;
-    }
+    // The manager signed the transaction, so no PDA seeds are needed; the burn
+    // can only ever come out of their own account.
+    let manager_info = ctx.accounts.manager.to_account_info();
+    let manager_coin_info = ctx.accounts.manager_coin_account.to_account_info();
+    let coin_token_program = ctx.accounts.token_program.to_account_info();
+    let total_burned = burn_coin(
+        &mut ctx.accounts.coin_config,
+        &mut ctx.accounts.coin_mint,
+        &manager_coin_info,
+        &manager_info,
+        &coin_token_program,
+        burned,
+        &[],
+    )?;
+
     if to_dev > 0 {
         token::transfer(
             CpiContext::new(
@@ -203,13 +205,7 @@ pub fn handler<'info>(
             to_dev,
         )?;
     }
-    ctx.accounts.coin_mint.reload()?;
-
     let coin_config = &mut ctx.accounts.coin_config;
-    coin_config.total_burned = coin_config
-        .total_burned
-        .checked_add(burned)
-        .ok_or(EtfError::MathOverflow)?;
     coin_config.total_dev_fees = coin_config
         .total_dev_fees
         .checked_add(to_dev)
@@ -218,7 +214,6 @@ pub fn handler<'info>(
         .baskets_funded
         .checked_add(1)
         .ok_or(EtfError::MathOverflow)?;
-    let total_burned = coin_config.total_burned;
 
     let now = Clock::get()?.unix_timestamp;
     emit!(CreationFeePaid {
