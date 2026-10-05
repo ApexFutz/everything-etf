@@ -174,6 +174,67 @@ async function main() {
   console.log("  Paid in basket tokens and underlyings, not SOL. Converting that to");
   console.log("  $EETF and sending it to the burn vault is an off-chain policy step —");
   console.log("  the program does not enforce it.");
+
+  // ------------------------------------------------------- how to peg the fee
+  //
+  // The decay problem: with a fee fixed in dollars, the share of supply retired
+  // per launch is (fee x burn) / FDV, so succeeding at raising the valuation is
+  // what makes the burn irrelevant. The fee can be pegged anywhere on a
+  // spectrum between two extremes, parameterised as fee ∝ FDV^β:
+  //
+  //   β = 0    fee fixed in dollars. Always affordable; burn share ∝ 1/FDV.
+  //   β = 1    fee fixed in COINS (a constant share of supply). Burn share is
+  //            constant forever, but the dollar price rises with the valuation
+  //            and eventually prices launchers out — the exact failure the
+  //            dollar peg was introduced to avoid.
+  //   β = 0.5  square root. A 100x valuation costs 10x more to launch against,
+  //            and the burn share decays 10x rather than 100x.
+  //
+  // There is no β that is affordable forever AND proportional forever; this is
+  // a genuine trade, not a problem to engineer away.
+  const ANCHOR_FDV = 5_000_000;
+  const pegged = (f: number, beta: number) => feeUsd * (f / ANCHOR_FDV) ** beta;
+
+  rule("HOW THE FEE IS PEGGED — fee ∝ FDV^β, anchored at $5 / $5M FDV");
+  console.log(`  Annual burn yield = dollars burned per year / FDV, at ${b} launches/day.`);
+  console.log("  Read it as a buyback yield: what the burn returns to a holder.\n");
+  console.log(
+    `  ${"FDV".padStart(13)}` +
+      `${"β=0 fee".padStart(11)}${"yield".padStart(11)}` +
+      `${"β=0.5 fee".padStart(13)}${"yield".padStart(11)}` +
+      `${"β=1 fee".padStart(11)}${"yield".padStart(11)}`,
+  );
+  rule();
+  for (const f of [50_000, 500_000, 5_000_000, 50_000_000, 500_000_000]) {
+    const cells = [0, 0.5, 1].flatMap((beta) => {
+      const fee = pegged(f, beta);
+      const yieldPct = (fee * burnShare * b * 365) / f;
+      return [usd(fee).padStart(beta === 0.5 ? 13 : 11), pct(yieldPct).padStart(11)];
+    });
+    console.log(`  ${usd(f).padStart(13)}${cells.join("")}`);
+  }
+  console.log();
+  console.log("  β=1 holds the yield flat, but note its fee column: launching costs");
+  console.log("  $500 once the token is worth $500M. β=0.5 is the compromise — a 10x");
+  console.log("  better burn at high valuations for a fee that stays plausible.");
+
+  // ---------------------------------------------------- what volume would fix
+  rule("WHAT IT WOULD ACTUALLY TAKE");
+  console.log("  Launches per day needed to reach a given annual burn yield.");
+  console.log("  (A buyback yield below ~1% is not a reason anyone holds a token.)\n");
+  console.log(
+    `  ${"FDV".padStart(13)}${"0.5%/yr".padStart(14)}${"1%/yr".padStart(14)}${"3%/yr".padStart(14)}`,
+  );
+  rule();
+  for (const f of [500_000, 5_000_000, 50_000_000, 500_000_000]) {
+    const need = (target: number) =>
+      Math.round((target * f) / (feeUsd * burnShare * 365)).toLocaleString("en-US");
+    console.log(`  ${usd(f).padStart(13)}${need(0.005).padStart(14)}${need(0.01).padStart(14)}${need(0.03).padStart(14)}`);
+  }
+  console.log();
+  console.log("  Volume is the dominant term. The peg changes the burn by ~10x; volume");
+  console.log("  changes it by 100x or more. No fee curve rescues a throughput shortfall,");
+  console.log("  which is why the burn reads as decorative above ~$500k FDV at 10/day.");
   rule();
 }
 
