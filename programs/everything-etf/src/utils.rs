@@ -19,9 +19,9 @@ use crate::state::{Basket, CoinConfig};
 /// Burns $EETF and records it. **This is the only way $EETF may be burned.**
 ///
 /// `CoinConfig.total_burned` is not just a dashboard number: it is the meter
-/// that every claim about the supply rests on, and it is intended to gate how
-/// fast locked allocations may be released, so a burn that doesn't increment it
-/// is a burn that never happened as far as the protocol is concerned. Keeping
+/// every public claim about the supply rests on and the only on-chain record
+/// that supply actually shrank, so a burn that doesn't increment it is a burn
+/// that never happened as far as the protocol is concerned. Keeping
 /// the CPI and the counter in one place means a new $EETF sink cannot get that
 /// pairing wrong — including the `reload()`, without which the caller's
 /// `coin_mint.supply` is the pre-burn figure and any event reporting it lies.

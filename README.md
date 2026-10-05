@@ -35,6 +35,20 @@ Splitting that into liquidity, community and dev allocations happens off-chain
 from that wallet — the program takes no position on it, so publish the
 allocation and the destination wallets before you run the instruction.
 
+**No allocation is locked or vested, by decision.** There is no escrow, no
+cliff and no release schedule, and the program contains no instruction that
+could enforce one. Distributing the bulk of supply up front with no insider
+overhang is a legitimate end state rather than only a deferral — it is roughly
+what Hyperliquid did, and the absence of an unlock calendar is a large part of
+why that structure held up.
+
+What makes it work is distributing. The failure mode is *not* "no locks" — it
+is "no locks, plus a wallet holding most of the supply that could sell at any
+time," which carries every drawback of an unlock schedule and none of the
+credibility. So treat this as a **one-way door**: locking can be added later
+only while the coins are still undistributed, because nothing can un-distribute
+them. Settle the question before any public distribution, not after.
+
 ### Where the coin is used
 
 **Launching a basket costs $EETF.** `create_basket` takes `creation_fee_coin`
@@ -100,10 +114,12 @@ that burns $EETF **must** go through `utils::burn_coin`, which performs the CPI,
 reloads the mint, and increments `total_burned` as one unit. Do not call
 `token::burn` on the coin mint directly.
 
-`total_burned` is not a dashboard counter. It is the meter every claim about the
-supply rests on, and it is intended to gate how fast locked allocations may be
-released, so a burn that doesn't increment it is a burn that didn't happen as
-far as the protocol is concerned. The opposite mistake matters too:
+`total_burned` is not a dashboard counter. It is the meter every public claim
+about the supply rests on and the only on-chain record that supply actually
+shrank, so a burn that doesn't increment it is a burn that didn't happen as far
+as the protocol is concerned. (It would also be the natural gate for a
+burn-linked release schedule, if one were ever added — nothing commits to that
+today.) The opposite mistake matters too:
 `redeem_basket` and `claim_fees` both call `token::burn` on a *basket* mint, and
 those must never touch this counter.
 

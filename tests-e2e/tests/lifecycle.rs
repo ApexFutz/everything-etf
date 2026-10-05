@@ -184,7 +184,7 @@ fn full_basket_lifecycle() {
 ///
 /// This is the invariant `utils::burn_coin` exists to hold, and it's worth a
 /// behavioural test rather than trusting the doc comment, because the counter
-/// is meant to gate how fast locked allocations may be released. It fails in
+/// is the only on-chain evidence that supply actually shrank. It fails in
 /// both directions that matter: a future $EETF sink that burns without
 /// incrementing the counter under-reports, and a basket-token burn
 /// (`redeem_basket`, `claim_fees`) that wrongly increments it over-reports.
