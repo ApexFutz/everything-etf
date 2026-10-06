@@ -3,7 +3,7 @@
  * Models what a day of basket launches does to funds and to $EETF supply.
  *
  * Every number the program actually enforces is imported rather than retyped —
- * the fee caps from constants.ts, the $5 target from pricing.ts, and the rent
+ * the fee caps from constants.ts, the $15 target from pricing.ts, and the rent
  * schedule from `estimateCreateCost`, which asks the chain rather than using a
  * formula (the real rate is 5080 lamports/byte, not the 6960 you get from the
  * commonly-quoted 3480-per-byte-year figure). So this cannot drift from the
@@ -195,7 +195,7 @@ async function main() {
   const ANCHOR_FDV = 5_000_000;
   const pegged = (f: number, beta: number) => feeUsd * (f / ANCHOR_FDV) ** beta;
 
-  rule("HOW THE FEE IS PEGGED — fee ∝ FDV^β, anchored at $5 / $5M FDV");
+  rule("HOW THE FEE IS PEGGED — fee ∝ FDV^β, anchored at $15 / $5M FDV");
   console.log(`  Annual burn yield = dollars burned per year / FDV, at ${b} launches/day.`);
   console.log("  Read it as a buyback yield: what the burn returns to a holder.\n");
   console.log(

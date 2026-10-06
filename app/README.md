@@ -59,7 +59,7 @@ prints the `.env.local` values to use.
 
 `creation_fee_coin` is stored as a fixed number of $EETF base units, but the policy is a
 dollar amount (see the root README's fee model). `scripts/repeg-coin-fee-devnet.mts` reads
-the live price, works out what $5 of $EETF is, and sends `update_coin_terms` when the
+the live price, works out what $15 of $EETF is, and sends `update_coin_terms` when the
 on-chain amount has drifted more than 25%:
 
 ```bash

@@ -57,7 +57,7 @@ from the manager and splits it in one transaction:
 - `creation_burn_bps` of it is **burned** — gone from supply, permanently
 - the remainder goes to the **dev treasury**, which funds the build
 
-**The fee targets $5 per launch, not a fixed number of coins.** A constant coin
+**The fee targets $15 per launch, not a fixed number of coins.** A constant coin
 amount can't hold that target on its own: if $EETF appreciates 10x, launching
 costs 10x in real terms and launches stop — which stops the burn the whole
 supply story rests on — and if it craters, the fee stops filtering anything and
@@ -69,11 +69,11 @@ than only to whoever runs the script.
 
 What the target implies, at a 1,000,000,000 genesis supply:
 
-| $EETF fully-diluted valuation | Price / coin | $5 launch fee |
+| $EETF fully-diluted valuation | Price / coin | $15 launch fee |
 |---|---|---|
-| $50,000 | $0.00005 | 100,000 EETF |
-| $500,000 | $0.0005 | 10,000 EETF |
-| $5,000,000 | $0.005 | 1,000 EETF |
+| $50,000 | $0.00005 | 300,000 EETF |
+| $500,000 | $0.0005 | 30,000 EETF |
+| $5,000,000 | $0.005 | 3,000 EETF |
 
 The split stays 70% burned / 30% dev. Both knobs move with
 `update_coin_terms`, both are bounded by hardcoded limits the authority cannot
@@ -177,7 +177,7 @@ for how to resolve that, and `--help` for all flags. It stops after the binary i
 
 | Item | Value |
 |---|---|
-| Creation fee | `creation_fee_coin` in $EETF, targeting ~$5 — burned / dev split, see above |
+| Creation fee | `creation_fee_coin` in $EETF, targeting ~$15 — burned / dev split, see above |
 | SOL creation fee | `creation_fee_lamports`, 0.1 SOL by default |
 | Mint fee | set per basket, hard cap **0.25%** |
 | Redeem fee | **always zero** — `MAX_REDEEM_FEE_BPS` is 0 |

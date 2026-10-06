@@ -11,7 +11,7 @@
  *     [--creation-fee-sol 0.1] [--protocol-share-bps 1000] \
  *     [--coin-creation-fee 100000] [--coin-burn-bps 7000]
  *
- * The coin fee targets ~$5 per launch; 100,000 EETF is $5 at a $50k
+ * The coin fee targets ~$15 per launch; 300,000 EETF is $15 at a $50k
  * fully-diluted valuation. Once $EETF has a price, scripts/repeg-coin-fee-devnet.mts
  * re-quotes it instead of this default.
  *

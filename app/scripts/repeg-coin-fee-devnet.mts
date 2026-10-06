@@ -1,23 +1,23 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Re-pegs the $EETF basket-creation fee to its dollar target (~$5).
+ * Re-pegs the $EETF basket-creation fee to its dollar target (~$15).
  *
  * The program stores the fee as a fixed number of $EETF base units, so the
  * dollar cost of launching a basket moves with the $EETF price unless somebody
  * re-quotes it. This is that somebody: it reads the live price, works out what
- * $5 of $EETF is, and sends `update_coin_terms` if the on-chain amount has
+ * $15 of $EETF is, and sends `update_coin_terms` if the on-chain amount has
  * drifted past the tolerance. Run it on a schedule.
  *
  * $EETF has no market until it trades, so before launch there is no price to
  * read and `--eetf-price` must be given explicitly. Note what the target
- * implies: at a $50k fully-diluted valuation (1B supply, $0.00005/coin) $5 is
- * 100,000 EETF; at $5M FDV it's 1,000 EETF. The fee amount is a function of
+ * implies: at a $50k fully-diluted valuation (1B supply, $0.00005/coin) $15 is
+ * 300,000 EETF; at $5M FDV it's 3,000 EETF. The fee amount is a function of
  * the valuation, which is exactly why it can't be a constant.
  *
  * Usage (from app/):
  *   npx tsx scripts/repeg-coin-fee-devnet.mts \
  *     --program-id <pubkey> --admin ../keys/devnet-admin.json \
- *     [--eetf-price 0.00005] [--target-usd 5] [--dry-run] [--url <rpc>]
+ *     [--eetf-price 0.00005] [--target-usd 15] [--dry-run] [--url <rpc>]
  */
 import { readFileSync } from "node:fs";
 import { Connection, Keypair, sendAndConfirmTransaction, Transaction } from "@solana/web3.js";

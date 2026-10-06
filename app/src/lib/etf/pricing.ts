@@ -3,7 +3,7 @@
  *
  * The $EETF creation fee is stored on-chain as a fixed number of base units,
  * but the *policy* is a dollar amount: launching a basket should cost about
- * $5 of $EETF. A fixed token amount can't hold that on its own — if $EETF
+ * $15 of $EETF. A fixed token amount can't hold that on its own — if $EETF
  * appreciates 10x, launching costs 10x in real terms and launches stop, which
  * stops the burn that the whole supply story rests on; if it craters, the fee
  * stops filtering anything and spam baskets return.
@@ -17,7 +17,7 @@
 import { COIN_DECIMALS } from "./constants";
 
 /** The policy: a basket launch costs this much in $EETF, whatever the price. */
-export const CREATION_FEE_USD_TARGET = 5;
+export const CREATION_FEE_USD_TARGET = 15;
 
 /**
  * How far the on-chain amount may drift from the target before it's worth a
