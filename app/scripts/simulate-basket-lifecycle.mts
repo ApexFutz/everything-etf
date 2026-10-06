@@ -191,17 +191,41 @@ async function main() {
   console.log("  the burn vault is a discretionary off-chain step today.");
 
   // --------------------------------------------------------------- claim drag
-  rule("ONE OPERATIONAL TRAP");
+  rule("CLAIM TIMING — why it is value-neutral");
   const decayPerMonth = 0.5 ** (30 / halfLifeDays);
-  console.log("  Fees accrue as basket tokens held in escrow, and are claimed later.");
-  console.log("  For a decaying basket the claim loses value while it waits: at a");
-  console.log(`  ${halfLifeDays}-day half-life a basket token sheds ${pct(1 - decayPerMonth)} of its value per month.`);
+  console.log("  A decaying basket's accrued fees lose dollar value while they sit:");
+  console.log(`  at a ${halfLifeDays}-day half-life, ${pct(1 - decayPerMonth)} per month.`);
   console.log();
-  row("Accrued but claimed 1 month late", usd(viralTotal * protoShare * decayPerMonth), pct(decayPerMonth));
-  row("Claimed 3 months late", usd(viralTotal * protoShare * decayPerMonth ** 3), pct(decayPerMonth ** 3));
+  row("Claim worth now", usd(viralTotal * protoShare), "100%");
+  row("  the same claim a month later", usd(viralTotal * protoShare * decayPerMonth), pct(decayPerMonth));
+  row("  three months later", usd(viralTotal * protoShare * decayPerMonth ** 3), pct(decayPerMonth ** 3));
   console.log();
-  console.log("  Claim often on fast-moving baskets. `accrue_fees` is permissionless,");
-  console.log("  but claiming is not — and waiting is a real loss, not a rounding error.");
+  console.log("  It is tempting to read that as a reason to claim early. It isn't, and");
+  console.log("  the mechanics are worth being exact about:");
+  console.log();
+  console.log("   - Dilution happens at ACCRUAL, not at claim. `accrue_streaming_fee`");
+  console.log("     mints the new tokens into escrow there and then, so NAV per token");
+  console.log("     has already absorbed it before anyone claims.");
+  console.log("   - Claiming is NAV-neutral to everyone else. The 75% cash leg burns");
+  console.log("     escrow tokens and pays pro-rata underlyings against the pre-burn");
+  console.log("     supply — a redemption at NAV. Assets and supply fall together, so");
+  console.log("     remaining holders are untouched.");
+  console.log("   - Claiming does not escape the decay either. The cash leg pays out the");
+  console.log("     SAME underlying coins that are falling. Claiming converts basket");
+  console.log("     exposure into equivalent underlying exposure at NAV, and nothing");
+  console.log("     more.");
+  console.log();
+  console.log("  So the number above is not a claim-timing loss — it is just the asset");
+  console.log("  falling, and it falls on the claimer identically whether they claimed");
+  console.log("  or not. Only SELLING avoids it, which means 'claim early' is really");
+  console.log("  'sell early'. Building urgency into claiming would be manufacturing");
+  console.log("  sell pressure and calling it a feature.");
+  console.log();
+  console.log("  The one genuine market effect is the 25% basket-token leg: a claimer");
+  console.log("  who dumps those on a DEX pushes the price below NAV. Note what");
+  console.log("  defends against that — redemption is free, so arbitrageurs close the");
+  console.log("  discount at zero fee cost. The zero redeem fee is what makes the");
+  console.log("  basket resilient to claim-dumping.");
   rule();
 }
 
