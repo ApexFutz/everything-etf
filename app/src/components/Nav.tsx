@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/baskets", label: "Baskets" },
   { href: "/eetf", label: "$EETF" },
   { href: "/baskets/new", label: "Create" },
+  { href: "/terms", label: "Fees & terms" },
   { href: "/admin", label: "Admin" },
 ];
 

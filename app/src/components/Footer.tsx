@@ -29,7 +29,10 @@ export function Footer() {
           </div>
           <div>
             Experimental, pre-audit software. Not financial or legal advice. Basket tokens built on
-            memecoins can lose most or all of their value.
+            memecoins can lose most or all of their value.{" "}
+            <Link href="/terms" className="underline decoration-dotted underline-offset-2">
+              Fees &amp; terms
+            </Link>
           </div>
         </div>
         <Link

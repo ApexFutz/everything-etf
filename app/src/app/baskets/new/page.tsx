@@ -2,6 +2,7 @@
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Banner, Button, Card, Field, Pill, TextInput } from "@/components/ui";
@@ -63,6 +64,18 @@ export default function NewBasketPage() {
   });
 
   const [showFees, setShowFees] = useState(false);
+  /**
+   * Gates the launch button. Nothing here should be a surprise after the fact,
+   * so the permanent consequences are spelled out with this basket's own
+   * numbers and have to be acknowledged before anything is spent.
+   *
+   * Stored as the fingerprint of the terms that were on screen when the box was
+   * ticked, rather than a bare boolean: changing the fees or the assets
+   * afterwards means the acknowledgement was for different terms, so it lapses
+   * and has to be given again. Derived on read, which avoids an effect that
+   * would have to race the inputs.
+   */
+  const [ackFor, setAckFor] = useState<string | null>(null);
   const [mintFeePct, setMintFeePct] = useState("0.25");
   const [streamingFeePct, setStreamingFeePct] = useState("0.5");
 
@@ -167,8 +180,6 @@ export default function NewBasketPage() {
 
   const countOk = assets.length >= MIN_ASSETS && assets.length <= MAX_ASSETS;
   const amountsOk = countOk && assets.every((a) => Number(amounts[a.address.toBase58()] ?? "0") > 0);
-  const canSubmit = Boolean(publicKey && name && symbol && amountsOk && config && coinConfig);
-
   const solCost =
     (config?.creationFeeLamports ?? 0n) + (cost ? cost.rentLamports + cost.networkFeeLamports : 0n);
   const usd = (lamports: bigint) =>
@@ -176,6 +187,24 @@ export default function NewBasketPage() {
   const coinFeeUsd =
     coinConfig && prices.coin !== null ? usdValueOfCoin(coinConfig.creationFeeCoin, prices.coin) : null;
   const money = (v: number) => `$${v < 1 ? v.toFixed(2) : v.toFixed(v < 100 ? 2 : 0)}`;
+
+  // Everything material the disclosure states. Name and symbol are left out on
+  // purpose: the fact that they're frozen doesn't change when they're edited,
+  // and invalidating on every keystroke would train people to tick past it.
+  const termsKey = JSON.stringify([
+    mintFeePct,
+    streamingFeePct,
+    config?.protocolShareBps,
+    coinConfig?.creationFeeCoin.toString(),
+    coinConfig?.creationBurnBps,
+    solCost.toString(),
+    assets.map((a) => a.address.toBase58()).sort(),
+  ]);
+  const acknowledged = ackFor === termsKey;
+
+  const canSubmit = Boolean(
+    publicKey && name && symbol && amountsOk && config && coinConfig && acknowledged,
+  );
 
   async function makeTestAssets() {
     if (!publicKey) return setError("connect a wallet first");
@@ -473,6 +502,110 @@ export default function NewBasketPage() {
           </Card>
         )}
 
+        {countOk && config && coinConfig && !done && (
+          <Card className="space-y-4">
+            <div>
+              <h2 className="font-semibold">Before you launch</h2>
+              <p className="mt-1 text-sm text-muted">
+                All of this is permanent. Read it now rather than discovering it afterwards —{" "}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="text-accent underline decoration-dotted underline-offset-2"
+                >
+                  the full terms and fee arithmetic
+                </Link>{" "}
+                explain how every number is calculated.
+              </p>
+            </div>
+
+            <ul className="space-y-2.5 text-sm">
+              {[
+                [
+                  "Your fees can only go down",
+                  <>
+                    You are setting <strong>{mintFeePct}%</strong> to mint and{" "}
+                    <strong>{streamingFeePct}%</strong> a year. You can lower these later but never
+                    raise them, so this is the most {symbol || "this basket"} will ever charge.
+                    Redeeming stays free and can&apos;t be switched on.
+                  </>,
+                ],
+                [
+                  "The protocol takes its share, locked in now",
+                  <>
+                    <strong>{formatBps(config.protocolShareBps)}</strong> of every fee goes to the
+                    protocol and you keep {formatBps(10_000 - config.protocolShareBps)}. This basket
+                    keeps that split for life — later protocol changes never touch it.
+                  </>,
+                ],
+                [
+                  "These coins are the coins, forever",
+                  <>
+                    All {assets.length} of them, at equal weight. Nothing can be added, removed or
+                    swapped, and the basket never rebalances — weights drift with price from here.
+                  </>,
+                ],
+                [
+                  "The name and symbol are frozen",
+                  <>
+                    &ldquo;{name || "Your basket"}&rdquo; ({symbol || "SYMBOL"}) is written as
+                    immutable metadata and can&apos;t be edited.
+                  </>,
+                ],
+                [
+                  "You are paying now, in two transactions",
+                  <>
+                    {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF
+                    {coinFeeUsd !== null && <> (≈{money(coinFeeUsd)})</>}, of which{" "}
+                    {formatBps(coinConfig.creationBurnBps)} is burned forever, plus ~
+                    {formatTokens(solCost, 9, 4)} SOL
+                    {usd(solCost) !== null && <> (≈{money(usd(solCost)!)})</>} — and your deposit
+                    above. Most of the SOL is refundable account rent, not a fee.
+                  </>,
+                ],
+                [
+                  "Nobody is managing this and it can lose everything",
+                  <>
+                    There is no strategy and no active management. Pre-audit software; basket tokens
+                    built on memecoins can lose most or all of their value.
+                  </>,
+                ],
+              ].map(([title, body], i) => (
+                <li key={i} className="flex gap-3">
+                  <span
+                    aria-hidden
+                    className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                  />
+                  <span>
+                    <strong className="font-medium">{title}.</strong>{" "}
+                    <span className="text-muted">{body}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-surface-2 px-4 py-3 text-sm">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAckFor(e.target.checked ? termsKey : null)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+              />
+              <span>
+                I&apos;ve read the above and the{" "}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="text-accent underline decoration-dotted underline-offset-2"
+                >
+                  terms
+                </Link>
+                , and I understand these choices are permanent.
+              </span>
+            </label>
+          </Card>
+        )}
+
         {error && <Banner kind="error">{error}</Banner>}
 
         {done && (
@@ -496,7 +629,9 @@ export default function NewBasketPage() {
                 ? "2 of 2 — making your initial buy…"
                 : !publicKey
                   ? "Connect a wallet"
-                  : "Launch & buy"}
+                  : !acknowledged && countOk && amountsOk && name && symbol
+                    ? "Confirm you've read the terms"
+                    : "Launch & buy"}
           </Button>
           {step !== null && <span className="text-xs text-muted">Two transactions — approve both.</span>}
         </div>
