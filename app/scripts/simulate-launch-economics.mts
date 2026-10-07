@@ -47,9 +47,7 @@ async function main() {
   const { CREATION_FEE_USD_TARGET, fetchUsdPrice, WRAPPED_SOL_MINT } = await import(
     "../src/lib/etf/pricing.js"
   );
-  const { COIN_TOTAL_SUPPLY, MAX_MINT_FEE_BPS, MAX_STREAMING_FEE_BPS } = await import(
-    "../src/lib/etf/constants.js"
-  );
+  const { COIN_TOTAL_SUPPLY } = await import("../src/lib/etf/constants.js");
 
   const livePrice = await fetchUsdPrice(WRAPPED_SOL_MINT);
   const solPrice = Number(arg("sol-price", String(livePrice ?? 150)));
@@ -72,7 +70,7 @@ async function main() {
   row("SOL price", usd(solPrice), livePrice ? "(live)" : "(assumed)");
   row("Baskets launched", String(baskets), `${assetsPerBasket} assets each`);
   row("Assumed AUM per basket", usd(aumPerBasket));
-  row("Mint fee / streaming fee", `${MAX_MINT_FEE_BPS / 100}%`, `${MAX_STREAMING_FEE_BPS / 100}%/yr`);
+  row("Per-basket fees", "none", "mint/hold/redeem free");
 
   // -------------------------------------------------------------- one launch
   const creationFeeLamports = BigInt(Math.round(creationFeeSol * 1e9));
@@ -155,12 +153,14 @@ async function main() {
   }
 
   // --------------------------------------------------------------- recurring
+  // Hypothetical only: every per-basket fee cap is zero, so these lines are what
+  // a fee WOULD earn if one were added, not revenue anyone receives today.
   const totalAum = aumPerBasket * b;
-  const streamingYr = totalAum * (MAX_STREAMING_FEE_BPS / 10_000);
-  const mintFees = totalAum * (MAX_MINT_FEE_BPS / 10_000);
+  const streamingYr = totalAum * (Number(arg("streaming-fee-bps", "50")) / 10_000);
+  const mintFees = totalAum * (Number(arg("mint-fee-bps", "25")) / 10_000);
   const protoShare = protocolShareBps / 10_000;
 
-  rule("RECURRING FEES, ONCE THOSE BASKETS EXIST");
+  rule("IF PER-BASKET FEES EXISTED (they don't — every cap is zero)");
   row("Combined AUM", usd(totalAum));
   row("Streaming fees / year", usd(streamingYr));
   row("  to managers", usd(streamingYr * (1 - protoShare)));
@@ -171,9 +171,9 @@ async function main() {
   rule();
   row("Protocol take / year", "", usd(streamingYr * protoShare + mintFees * protoShare));
   console.log();
-  console.log("  Paid in basket tokens and underlyings, not SOL. Converting that to");
-  console.log("  $EETF and sending it to the burn vault is an off-chain policy step —");
-  console.log("  the program does not enforce it.");
+  console.log("  None of this is charged. Shown so the cost of the no-fee decision is");
+  console.log("  explicit: this is the revenue being given up in exchange for a basket");
+  console.log("  that tracks NAV with no arbitrage band and cannot be taxed later.");
 
   // ------------------------------------------------------- how to peg the fee
   //

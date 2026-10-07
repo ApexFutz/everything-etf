@@ -5,7 +5,6 @@ import {
   COIN_TOTAL_SUPPLY,
   MAX_ASSETS,
   MAX_MINT_FEE_BPS,
-  MAX_PROTOCOL_SHARE_BPS,
   MAX_REDEEM_FEE_BPS,
   MAX_STREAMING_FEE_BPS,
   MIN_ASSETS,
@@ -67,7 +66,7 @@ export default function Home() {
               {
                 step: "01",
                 title: "Create",
-                body: `A manager picks ${MIN_ASSETS}–${MAX_ASSETS} existing SPL or Token-2022 mints and sets the basket's fees, under hard caps the program enforces.`,
+                body: `A manager picks ${MIN_ASSETS}–${MAX_ASSETS} existing SPL or Token-2022 mints and names the basket. It charges no fees — they pay a one-time launch fee instead.`,
               },
               {
                 step: "02",
@@ -164,10 +163,10 @@ export default function Home() {
               </thead>
               <tbody className="divide-y divide-border bg-surface">
                 {[
-                  ["Mint", "Basket manager", formatBps(MAX_MINT_FEE_BPS)],
-                  ["Redeem", "Nobody — always free", formatBps(MAX_REDEEM_FEE_BPS)],
-                  ["Streaming (annual)", "Basket manager", `${formatBps(MAX_STREAMING_FEE_BPS)} / year`],
-                  ["Protocol share of all fees", "Protocol, locked in per basket at creation", formatBps(MAX_PROTOCOL_SHARE_BPS)],
+                  ["Mint a basket token", "Nobody — free", formatBps(MAX_MINT_FEE_BPS)],
+                  ["Redeem", "Nobody — free", formatBps(MAX_REDEEM_FEE_BPS)],
+                  ["Hold (annual)", "Nobody — free", formatBps(MAX_STREAMING_FEE_BPS)],
+                  ["Launch a basket", "The creator, once", "$EETF + SOL"],
                 ].map(([fee, who, cap]) => (
                   <tr key={fee}>
                     <td className="px-4 py-2.5 font-medium">{fee}</td>
@@ -179,16 +178,17 @@ export default function Home() {
             </table>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-muted">
-            Every payout splits <strong>75% cash leg / 25% basket tokens</strong>. Fees accrue as
-            basket tokens in an escrow owned by the basket itself, and the claim amount is fixed by
-            on-chain ledgers — there is no discretionary withdrawal.
+            <strong>A basket charges nothing, ever.</strong> Creating one costs a one-time launch
+            fee in $EETF and SOL, and after that minting, holding and redeeming are all free. Those
+            three caps are zero in the compiled program, not settings, so no authority can raise
+            them on a basket you already hold.
           </p>
           <p className="mt-3 text-sm leading-relaxed text-muted">
-            These caps sit below the comparable market on purpose. Minting and redeeming at true
-            value is the mechanism that keeps a basket&apos;s price tracking the coins inside it, and
-            every basis point charged there widens the gap the price can drift before closing it
-            becomes worth anyone&apos;s while — so redeeming is free and minting is capped at a
-            quarter percent, with the annual fee carrying the economics instead.
+            Two things follow. The basket tracks its net asset value as tightly as the mechanism
+            allows, because every basis point charged on the way in or out widens the gap the market
+            price can drift before arbitrage pays to close it — at zero there is no gap. And a
+            creator earns by being right rather than by extracting: they hold 100% of the starting
+            supply, so they make money the same way every other holder does.
           </p>
         </Section>
 

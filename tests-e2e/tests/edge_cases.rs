@@ -213,7 +213,7 @@ fn create_basket_accepts_an_empty_uri() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    env.create_basket_named(&assets.mints, manager_coin, "Frog Basket", "FROG", "", 25, 0, 50)
+    env.create_basket_named(&assets.mints, manager_coin, "Frog Basket", "FROG", "", 0, 0, 0)
         .expect("an empty metadata URI should be accepted");
 }
 
@@ -243,6 +243,20 @@ fn create_basket_rejects_redeem_fee_above_cap() {
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
     let res = env.create_basket(&assets.mints, manager_coin, 0, MAX_REDEEM_FEE_BPS + 1, 0);
     assert_etf_error(res, EtfError::FeeAboveCap);
+}
+
+/// Every per-basket fee cap is zero, so a basket literally cannot be created
+/// with a fee on it — not by this UI, and not by anyone calling the program
+/// directly. One basis point on any of the three is rejected.
+#[test]
+fn create_basket_rejects_any_nonzero_fee() {
+    for (mint_fee, redeem_fee, streaming_fee) in [(1u16, 0u16, 0u16), (0, 1, 0), (0, 0, 1)] {
+        let mut env = Env::new();
+        let assets = env.with_three_assets();
+        let manager_coin = env.fund_coin(pubkey_of(&env.manager), 400_000 * 1_000_000_000);
+        let res = env.create_basket(&assets.mints, manager_coin, mint_fee, redeem_fee, streaming_fee);
+        assert_etf_error(res, EtfError::FeeAboveCap);
+    }
 }
 
 #[test]
@@ -452,7 +466,7 @@ fn claim_fees_rejects_wrong_claimer() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 25, 0, 0).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 0, 0, 0).unwrap();
 
     let manager_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.manager));
     env.seed_basket(
@@ -464,7 +478,8 @@ fn claim_fees_rejects_wrong_claimer() {
     )
     .unwrap();
 
-    // Mint something so a fee actually accrues.
+    // Mint something. No fee accrues (every cap is zero), but the claimer
+    // check runs before the empty-ledger check, which is what this pins down.
     let alice_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.alice));
     let alice = env.alice.insecure_clone();
     env.mint_basket(
@@ -506,7 +521,7 @@ fn lower_fees_rejects_non_manager() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 25, 0, 50).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 0, 0, 0).unwrap();
 
     let alice = env.alice.insecure_clone();
     let res = env.lower_fees_as(&basket, &alice, 10, 10, 10);
@@ -518,14 +533,14 @@ fn lower_fees_rejects_any_single_increase() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 25, 0, 50).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 0, 0, 0).unwrap();
 
-    // Lowering the mint fee but raising streaming must fail as a whole.
-    let res = env.lower_fees(&basket, 10, 0, 51);
+    // Fees are already zero, so raising any single one must fail as a whole.
+    let res = env.lower_fees(&basket, 0, 0, 1);
     assert_etf_error(res, EtfError::FeeIncreaseNotAllowed);
     // Nothing should have been written on the rejected call.
     let b = env.basket_account(basket.key);
-    assert_eq!((b.mint_fee_bps, b.redeem_fee_bps, b.streaming_fee_bps), (25, 0, 50));
+    assert_eq!((b.mint_fee_bps, b.redeem_fee_bps, b.streaming_fee_bps), (0, 0, 0));
 }
 
 // ---------------------------------------------------------------------------
@@ -549,7 +564,7 @@ fn accrue_fees_twice_in_the_same_instant_mints_nothing_the_second_time() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
-    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 0, 0, 50).unwrap();
+    let (basket, _) = env.create_basket(&assets.mints, manager_coin, 0, 0, 0).unwrap();
 
     let manager_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.manager));
     env.seed_basket(
@@ -561,11 +576,14 @@ fn accrue_fees_twice_in_the_same_instant_mints_nothing_the_second_time() {
     )
     .unwrap();
 
+    let supply_before = env.mint_supply(basket.mint);
     env.warp_seconds(1_000);
     env.accrue_fees(&basket).unwrap();
     let supply_after_first = env.mint_supply(basket.mint);
+    // Zero streaming fee: time passing mints nothing in the first place.
+    assert_eq!(supply_after_first, supply_before);
 
-    // No time has passed since; a second accrual must be a no-op.
+    // And a second accrual in the same instant is still a no-op.
     env.accrue_fees(&basket).unwrap();
     assert_eq!(env.mint_supply(basket.mint), supply_after_first);
 }

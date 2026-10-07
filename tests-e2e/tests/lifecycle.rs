@@ -40,7 +40,7 @@ fn full_basket_lifecycle() {
 
     let supply_before = env.mint_supply(env.coin_mint);
     let (basket, meta) = env
-        .create_basket(&assets.mints, manager_coin, 25, 0, 50)
+        .create_basket(&assets.mints, manager_coin, 0, 0, 0)
         .expect("create_basket should succeed");
     assert!(!meta.logs.is_empty());
 
@@ -87,14 +87,13 @@ fn full_basket_lifecycle() {
     )
     .expect("mint_basket should succeed");
 
-    // 0.25% mint fee: Alice nets 99.75, the other 0.25 basket tokens sit in escrow.
-    assert_eq!(env.token_balance(alice_basket_acc), 99_750_000_000);
-    assert_eq!(env.token_balance(basket.fee_escrow), 250_000_000);
+    // No mint fee: Alice receives every token she paid for, and the escrow stays
+    // empty. The launch fee is the only fee in the protocol.
+    assert_eq!(env.token_balance(alice_basket_acc), 100_000_000_000);
+    assert_eq!(env.token_balance(basket.fee_escrow), 0);
     let b = env.basket_account(basket.key);
-    assert_eq!(b.manager_fees_accrued + b.protocol_fees_accrued, 250_000_000);
-    // 10% protocol share, snapshotted from config at creation.
-    assert_eq!(b.protocol_fees_accrued, 25_000_000);
-    assert_eq!(b.manager_fees_accrued, 225_000_000);
+    assert_eq!(b.manager_fees_accrued, 0);
+    assert_eq!(b.protocol_fees_accrued, 0);
 
     // Each vault grew by 10% (Alice deposited 1/10th of the existing NAV, since
     // mint amount is computed pre-fee against pre-mint supply).
@@ -103,38 +102,32 @@ fn full_basket_lifecycle() {
         assert_eq!(env.token_balance(*vault), expected, "vault {vault}");
     }
 
-    // Streaming fee: warp a full year forward and accrue permissionlessly.
+    // No streaming fee: a whole year passes, accrual is cranked, and supply does
+    // not move. Holding a basket costs nothing, forever.
     env.accrue_fees(&basket).unwrap();
-    let supply_with_fee = env.mint_supply(basket.mint);
+    let supply_before_year = env.mint_supply(basket.mint);
     env.warp_seconds(365 * 24 * 60 * 60);
     env.accrue_fees(&basket).unwrap();
-    let supply_after_year = env.mint_supply(basket.mint);
-    assert!(
-        supply_after_year > supply_with_fee,
-        "a year of 0.5% streaming fee should have minted new basket tokens"
+    assert_eq!(
+        env.mint_supply(basket.mint),
+        supply_before_year,
+        "a year of holding must not dilute anyone"
     );
-    // ~0.5% annual streaming fee against ~1,099.75 supply.
-    let minted = supply_after_year - supply_with_fee;
-    let share = minted as f64 / supply_after_year as f64;
-    assert!((share - 0.005).abs() < 0.0005, "share was {share}");
+    assert_eq!(env.token_balance(basket.fee_escrow), 0);
 
-    // Manager claims accrued fees: 25% basket tokens, 75% in-kind underlyings.
-    let b = env.basket_account(basket.key);
-    let manager_claim = b.manager_fees_accrued;
-    assert!(manager_claim > 0);
+    // There is never anything to claim — for the manager or for the protocol.
+    // The claim instructions still exist but can only ever report an empty
+    // ledger, which is the inert state the zero caps are supposed to produce.
     let manager = env.manager.insecure_clone();
-    env.claim_fees(
+    let res = env.claim_fees(
         &basket,
         &manager,
         FeeRecipient::Manager,
         manager_basket_acc,
         &assets.manager_accounts,
-    )
-    .expect("manager claim should succeed");
-    let b_after = env.basket_account(basket.key);
-    assert_eq!(b_after.manager_fees_accrued, 0);
+    );
+    assert_etf_error(res, EtfError::NothingToClaim);
 
-    // Protocol claims too, paid to the treasury's basket-token account.
     let treasury_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.treasury));
     let treasury_asset_accs: Vec<_> = assets
         .mints
@@ -142,18 +135,14 @@ fn full_basket_lifecycle() {
         .map(|m| env.create_token_account(*m, pubkey_of(&env.treasury)))
         .collect();
     let authority = env.authority.insecure_clone();
-    let protocol_claim = env.basket_account(basket.key).protocol_fees_accrued;
-    assert!(protocol_claim > 0);
-    env.claim_fees(
+    let res = env.claim_fees(
         &basket,
         &authority,
         FeeRecipient::Protocol,
         treasury_basket_acc,
         &treasury_asset_accs,
-    )
-    .expect("protocol claim should succeed");
-    assert_eq!(env.basket_account(basket.key).protocol_fees_accrued, 0);
-    assert!(env.token_balance(treasury_basket_acc) > 0);
+    );
+    assert_etf_error(res, EtfError::NothingToClaim);
 
     // Alice redeems her full basket-token balance back for the underlyings.
     let alice_basket_before = env.token_balance(alice_basket_acc);
@@ -169,13 +158,16 @@ fn full_basket_lifecycle() {
     .expect("redeem_basket should succeed");
     assert_eq!(env.token_balance(alice_basket_acc), 0);
 
-    // Manager lowers fees; raising them back is rejected. Redeem is already
-    // zero (the cap), so it can only ever be restated as zero.
-    env.lower_fees(&basket, 10, 0, 25)
-        .expect("lowering fees should succeed");
-    assert_eq!(env.basket_account(basket.key).mint_fee_bps, 10);
-    let raise = env.lower_fees(&basket, 20, 0, 25);
-    assert_etf_error(raise, EtfError::FeeIncreaseNotAllowed);
+    // Every fee is already zero, so `lower_fees` can only ever restate zero —
+    // and any attempt to put a fee on an existing basket is an increase.
+    env.lower_fees(&basket, 0, 0, 0)
+        .expect("restating zero should succeed");
+    for (m, r, st) in [(1u16, 0u16, 0u16), (0, 1, 0), (0, 0, 1)] {
+        let res = env.lower_fees(&basket, m, r, st);
+        assert_etf_error(res, EtfError::FeeIncreaseNotAllowed);
+    }
+    let b = env.basket_account(basket.key);
+    assert_eq!((b.mint_fee_bps, b.redeem_fee_bps, b.streaming_fee_bps), (0, 0, 0));
 }
 
 /// `CoinConfig.total_burned` must equal exactly the $EETF that has left the
@@ -205,7 +197,7 @@ fn total_burned_accounts_for_every_coin_that_left_the_supply() {
 
     // 1. A basket launch burns coins through the create_basket leg.
     let (basket, _) = env
-        .create_basket(&assets.mints, manager_coin, 25, 0, 50)
+        .create_basket(&assets.mints, manager_coin, 0, 0, 0)
         .unwrap();
     check(&env, "create_basket");
 
@@ -234,19 +226,11 @@ fn total_burned_accounts_for_every_coin_that_left_the_supply() {
     .unwrap();
     check(&env, "mint_basket");
 
-    // 3. A fee claim also burns basket tokens (the 75% cash leg).
+    // 3. Time passes and accrual is cranked. With zero fees this mints nothing,
+    //    but it still must not touch the coin counter.
     env.warp_seconds(90 * 24 * 60 * 60);
     env.accrue_fees(&basket).unwrap();
-    let manager = env.manager.insecure_clone();
-    env.claim_fees(
-        &basket,
-        &manager,
-        FeeRecipient::Manager,
-        manager_basket_acc,
-        &assets.manager_accounts,
-    )
-    .unwrap();
-    check(&env, "claim_fees");
+    check(&env, "accrue_fees");
 
     let alice_balance = env.token_balance(alice_basket_acc);
     env.redeem_basket(
@@ -324,7 +308,7 @@ fn mint_respects_slippage_guard() {
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
     let (basket, _) = env
-        .create_basket(&assets.mints, manager_coin, 25, 0, 0)
+        .create_basket(&assets.mints, manager_coin, 0, 0, 0)
         .unwrap();
 
     let manager_basket_acc = env.create_token_account(basket.mint, pubkey_of(&env.manager));

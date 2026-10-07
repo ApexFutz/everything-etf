@@ -94,9 +94,10 @@ async function main() {
     name,
     symbol,
     uri: "",
-    mintFeeBps: 25,
+    // All three caps are zero in the program: baskets charge nothing.
+    mintFeeBps: 0,
     redeemFeeBps: 0,
-    streamingFeeBps: 50,
+    streamingFeeBps: 0,
   });
   console.log(`     ${await send(instructions)}`);
   console.log(`     basket ${basket.toBase58()}`);

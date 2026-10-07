@@ -20,8 +20,6 @@ import {
   BASKET_DECIMALS,
   COIN_DECIMALS,
   MAX_ASSETS,
-  MAX_MINT_FEE_BPS,
-  MAX_STREAMING_FEE_BPS,
   MIN_ASSETS,
 } from "@/lib/etf/constants";
 import { CoinConfig, Config } from "@/lib/etf/accounts";
@@ -63,7 +61,6 @@ export default function NewBasketPage() {
     sol: null,
   });
 
-  const [showFees, setShowFees] = useState(false);
   /**
    * Gates the launch button. Nothing here should be a surprise after the fact,
    * so the permanent consequences are spelled out with this basket's own
@@ -76,8 +73,6 @@ export default function NewBasketPage() {
    * would have to race the inputs.
    */
   const [ackFor, setAckFor] = useState<string | null>(null);
-  const [mintFeePct, setMintFeePct] = useState("0.25");
-  const [streamingFeePct, setStreamingFeePct] = useState("0.5");
 
   const [minting, setMinting] = useState(false);
   const [step, setStep] = useState<null | "creating" | "buying">(null);
@@ -192,8 +187,6 @@ export default function NewBasketPage() {
   // purpose: the fact that they're frozen doesn't change when they're edited,
   // and invalidating on every keystroke would train people to tick past it.
   const termsKey = JSON.stringify([
-    mintFeePct,
-    streamingFeePct,
     config?.protocolShareBps,
     coinConfig?.creationFeeCoin.toString(),
     coinConfig?.creationBurnBps,
@@ -234,7 +227,6 @@ export default function NewBasketPage() {
     setDone(null);
 
     try {
-      const pct = (v: string) => Math.round(Number(v) * 100); // percent -> bps
       const basketCount = config.basketCount;
 
       // Two transactions on purpose: create_basket allocates a vault per asset,
@@ -250,10 +242,11 @@ export default function NewBasketPage() {
         name,
         symbol,
         uri: "",
-        mintFeeBps: pct(mintFeePct),
-        // Always zero — redemption is free, and the program caps it at zero.
+        // All three caps are zero in the program: a basket charges nothing, and
+        // the launch fee is the only fee in the protocol.
+        mintFeeBps: 0,
         redeemFeeBps: 0,
-        streamingFeeBps: pct(streamingFeePct),
+        streamingFeeBps: 0,
       });
       const createSig = await send(instructions);
       if (!createSig) return setStep(null);
@@ -451,53 +444,20 @@ export default function NewBasketPage() {
             </dl>
 
             <div className="rounded-lg border border-border bg-surface-2 px-4 py-3 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  Fees you&apos;ll charge: <strong className="tabular-nums">{mintFeePct}%</strong> to
-                  mint · <strong className="tabular-nums">{streamingFeePct}%</strong> a year ·
-                  nothing to redeem
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowFees((v) => !v)}
-                  className="text-xs text-accent underline decoration-dotted underline-offset-2"
+              <strong className="font-medium">This basket charges no fees.</strong>{" "}
+              <span className="text-muted">
+                Nothing to mint, nothing to redeem, nothing per year — and no authority can turn
+                any of them on later, because all three caps are zero in the program itself. Your
+                return is the basket going up: you hold 100% of its starting supply, the same as
+                any other holder.{" "}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="text-accent underline decoration-dotted underline-offset-2"
                 >
-                  {showFees ? "Hide" : "Change"}
-                </button>
-              </div>
-
-              {showFees && (
-                <div className="mt-4 space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="To mint %" hint={`max ${formatBps(MAX_MINT_FEE_BPS)}`}>
-                      <TextInput
-                        value={mintFeePct}
-                        onChange={(e) => setMintFeePct(e.target.value)}
-                        inputMode="decimal"
-                      />
-                    </Field>
-                    <Field label="Per year %" hint={`max ${formatBps(MAX_STREAMING_FEE_BPS)}`}>
-                      <TextInput
-                        value={streamingFeePct}
-                        onChange={(e) => setStreamingFeePct(e.target.value)}
-                        inputMode="decimal"
-                      />
-                    </Field>
-                  </div>
-                  <Banner kind="warn">
-                    You can lower these later but never raise them — what you set now is a permanent
-                    ceiling. The mint fee is paid by people buying in; the yearly fee is charged to
-                    everyone holding, by slowly minting new basket tokens to you. You keep{" "}
-                    {formatBps(10_000 - config.protocolShareBps)} of both and the protocol takes{" "}
-                    {formatBps(config.protocolShareBps)}.
-                  </Banner>
-                  <p className="text-xs text-muted">
-                    Redeeming is always free and can&apos;t be changed. Buying and selling at the
-                    basket&apos;s true value is what keeps its price tracking the coins inside it, so
-                    the protocol doesn&apos;t let anyone tax the way out.
-                  </p>
-                </div>
-              )}
+                  How this works
+                </Link>
+              </span>
             </div>
           </Card>
         )}
@@ -522,20 +482,11 @@ export default function NewBasketPage() {
             <ul className="space-y-2.5 text-sm">
               {[
                 [
-                  "Your fees can only go down",
+                  "There are no ongoing fees, for anyone",
                   <>
-                    You are setting <strong>{mintFeePct}%</strong> to mint and{" "}
-                    <strong>{streamingFeePct}%</strong> a year. You can lower these later but never
-                    raise them, so this is the most {symbol || "this basket"} will ever charge.
-                    Redeeming stays free and can&apos;t be switched on.
-                  </>,
-                ],
-                [
-                  "The protocol takes its share, locked in now",
-                  <>
-                    <strong>{formatBps(config.protocolShareBps)}</strong> of every fee goes to the
-                    protocol and you keep {formatBps(10_000 - config.protocolShareBps)}. This basket
-                    keeps that split for life — later protocol changes never touch it.
+                    {symbol || "This basket"} charges nothing to mint, nothing to redeem and nothing
+                    per year, and nobody can switch that on later. You earn if the basket
+                    appreciates — you&apos;ll hold 100% of its starting supply — not from fees.
                   </>,
                 ],
                 [

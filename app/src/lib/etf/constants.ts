@@ -17,9 +17,10 @@ export const MIN_ASSETS = 2;
 export const MAX_ASSETS = 10;
 
 // Mirror of constants.rs — the consistency test fails if these drift.
-export const MAX_MINT_FEE_BPS = 25; // 0.25%
-export const MAX_REDEEM_FEE_BPS = 0; // redemption is always free
-export const MAX_STREAMING_FEE_BPS = 50; // 0.5% / year
+// All zero: a basket charges nothing. The launch fee is the only fee.
+export const MAX_MINT_FEE_BPS = 0;
+export const MAX_REDEEM_FEE_BPS = 0;
+export const MAX_STREAMING_FEE_BPS = 0;
 export const MAX_PROTOCOL_SHARE_BPS = 3_000; // 30%
 
 export const BASKET_DECIMALS = 9;

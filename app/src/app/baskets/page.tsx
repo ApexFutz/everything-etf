@@ -152,9 +152,7 @@ export default function BasketsPage() {
                         Manager <AddressLink address={b.manager.toBase58()} />
                       </div>
                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-                        <span>mint {formatBps(b.mintFeeBps)}</span>
-                        <span>redeem {formatBps(b.redeemFeeBps)}</span>
-                        <span>stream {formatBps(b.streamingFeeBps)}/yr</span>
+                        <span>no fees</span>
                       </div>
                     </Card>
                   </Link>

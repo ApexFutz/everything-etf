@@ -11,7 +11,6 @@ import {
   fetchBasketById,
   fetchConfig,
   fetchVaultBalances,
-  lowerFeesTx,
   mintBasketTx,
   redeemBasketTx,
   seedBasketTx,
@@ -102,9 +101,7 @@ export default function BasketPage() {
       <Card>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="Supply" value={formatBaseUnits(supply, BASKET_DECIMALS)} />
-          <Stat label="Mint fee" value={formatBps(basket.mintFeeBps)} />
-          <Stat label="Redeem fee" value={formatBps(basket.redeemFeeBps)} />
-          <Stat label="Streaming fee" value={`${formatBps(basket.streamingFeeBps)}/yr`} />
+          <Stat label="Fees" value="None" sub="mint, redeem and holding are all free" />
           <Stat
             label="Manager fees accrued"
             value={formatBaseUnits(basket.managerFeesAccrued, BASKET_DECIMALS)}
@@ -198,9 +195,6 @@ export default function BasketPage() {
         />
       )}
 
-      {isManager && (
-        <LowerFeesForm basket={basket} pending={pending} send={send} onDone={after} setError={setError} />
-      )}
     </div>
   );
 }
@@ -442,62 +436,3 @@ function ClaimCard({
   );
 }
 
-function LowerFeesForm({
-  basket,
-  pending,
-  send,
-  onDone,
-  setError,
-}: {
-  basket: BasketWithKey;
-  pending: boolean;
-  send: SendFn;
-  onDone: (sig: string | null) => void;
-  setError: (e: string | null) => void;
-}) {
-  const [mintFeeBps, setMintFeeBps] = useState(String(basket.mintFeeBps));
-  const [redeemFeeBps, setRedeemFeeBps] = useState(String(basket.redeemFeeBps));
-  const [streamingFeeBps, setStreamingFeeBps] = useState(String(basket.streamingFeeBps));
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const ixs = lowerFeesTx({
-        manager: basket.manager,
-        basket: basket.pubkey,
-        basketMint: basket.mint,
-        feeEscrow: basket.feeEscrow,
-        mintFeeBps: Number(mintFeeBps),
-        redeemFeeBps: Number(redeemFeeBps),
-        streamingFeeBps: Number(streamingFeeBps),
-      });
-      onDone(await send(ixs));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  return (
-    <Card>
-      <h2 className="mb-3 text-sm font-semibold text-muted">
-        Lower fees (never raise)
-      </h2>
-      <form onSubmit={onSubmit} className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Mint fee (bps)">
-            <TextInput value={mintFeeBps} onChange={(e) => setMintFeeBps(e.target.value)} />
-          </Field>
-          <Field label="Redeem fee (bps)">
-            <TextInput value={redeemFeeBps} onChange={(e) => setRedeemFeeBps(e.target.value)} />
-          </Field>
-          <Field label="Streaming fee (bps)">
-            <TextInput value={streamingFeeBps} onChange={(e) => setStreamingFeeBps(e.target.value)} />
-          </Field>
-        </div>
-        <Button type="submit" disabled={pending}>
-          {pending ? "Sending…" : "Update fees"}
-        </Button>
-      </form>
-    </Card>
-  );
-}

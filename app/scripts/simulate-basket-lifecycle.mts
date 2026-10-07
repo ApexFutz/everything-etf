@@ -1,6 +1,12 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Models fees across a basket's whole life, not just its launch.
+ * Models what a per-basket fee would earn across a basket's whole life.
+ *
+ * NOTE: the protocol charges no per-basket fees. Every cap in constants.rs is
+ * zero — minting, holding and redeeming are free, and the one-time launch fee is
+ * the only fee that exists. This script exists to inform whether that should
+ * ever change, so its rates are flags (--mint-fee-bps, --streaming-fee-bps)
+ * rather than imported constants.
  *
  * The thing this exists to make visible: **trading volume is not fee volume.**
  *
@@ -28,7 +34,7 @@
  *   npx tsx scripts/simulate-basket-lifecycle.mts \
  *     [--peak-aum 1000000] [--seed-aum 10000] [--ramp-days 14] \
  *     [--half-life-days 42] [--creation-multiple 2.5] [--viral-rate 0.05] \
- *     [--launches-per-day 10] [--fdv 5000000] [--sol-price <live>]
+ *     [--launches-per-day 10] [--fdv 5000000] [--sol-price <live>]  *     [--mint-fee-bps 25] [--streaming-fee-bps 50] [--protocol-share-bps 1000]
  */
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
@@ -67,16 +73,22 @@ async function main() {
   const { CREATION_FEE_USD_TARGET, fetchUsdPrice, WRAPPED_SOL_MINT } = await import(
     "../src/lib/etf/pricing.js"
   );
-  const { MAX_MINT_FEE_BPS, MAX_STREAMING_FEE_BPS } = await import("../src/lib/etf/constants.js");
 
   const livePrice = await fetchUsdPrice(WRAPPED_SOL_MINT);
   const solPrice = Number(arg("sol-price", String(livePrice ?? 150)));
-  const mintRate = MAX_MINT_FEE_BPS / 10_000;
-  const streamRate = MAX_STREAMING_FEE_BPS / 10_000;
-  const protoShare = 0.1;
+  // Hypothetical rates. The protocol charges NONE of these today — every
+  // per-basket fee cap is zero in constants.rs, so this models what a fee would
+  // earn if one were ever added, not what anyone is paid now.
+  const mintRate = Number(arg("mint-fee-bps", "25")) / 10_000;
+  const streamRate = Number(arg("streaming-fee-bps", "50")) / 10_000;
+  const protoShare = Number(arg("protocol-share-bps", "1000")) / 10_000;
   const solFeeUsd = 0.1 * solPrice;
 
-  rule("ASSUMPTIONS (guesses about market behaviour, not derived facts)");
+  rule("HYPOTHETICAL — the protocol charges no per-basket fees today");
+  console.log("  Every fee cap in constants.rs is zero: minting, holding and redeeming are");
+  console.log("  free. This models what a fee WOULD earn if one were added, to inform that");
+  console.log("  decision. Market behaviour below is guessed, not derived.");
+  console.log();
   row("Peak AUM, a basket that catches", usd(peakAum));
   row("Seed AUM (manager's initial buy)", usd(seedAum));
   row("Days to peak, then decay half-life", `${rampDays} d`, `${halfLifeDays} d`);
