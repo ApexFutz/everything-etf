@@ -55,7 +55,21 @@ npx tsx scripts/initialize-devnet.mts \
 That runs `initialize_config` and `initialize_coin` (skipping either if already done) and
 prints the `.env.local` values to use.
 
-### Keeping the launch fee pegged to $5
+### Changing protocol terms on a live deployment
+
+`update_protocol_terms` overwrites the treasury, the SOL creation fee and the protocol
+share together, so naming only one of them would silently reset the other two.
+`scripts/update-protocol-terms-devnet.mts` reads the current `Config` first and only
+replaces what you pass, printing a before/after diff:
+
+```bash
+npx tsx scripts/update-protocol-terms-devnet.mts   --program-id <deployed program id>   --admin ../keys/devnet-admin.json   --creation-fee-sol 0.1 --dry-run
+```
+
+It refuses to send when nothing would change, and checks the signer really is
+`Config.authority` before trying. Terms only affect baskets created *after* the call.
+
+### Keeping the launch fee pegged to $15
 
 `creation_fee_coin` is stored as a fixed number of $EETF base units, but the policy is a
 dollar amount (see the root README's fee model). `scripts/repeg-coin-fee-devnet.mts` reads
