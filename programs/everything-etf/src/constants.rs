@@ -8,10 +8,35 @@ pub const BPS: u64 = 10_000;
 pub const MIN_ASSETS: usize = 2;
 pub const MAX_ASSETS: usize = 10;
 
-/// Hard fee caps.
-pub const MAX_MINT_FEE_BPS: u16 = 100; // 1%
-pub const MAX_REDEEM_FEE_BPS: u16 = 100; // 1%
-pub const MAX_STREAMING_FEE_BPS: u16 = 300; // 3% per year
+/// Hard fee caps — all zero. **A basket charges nothing.**
+///
+/// The only thing anyone pays is the launch fee, once, to create the basket.
+/// After that a basket is a pure in-kind wrapper: minting, holding and
+/// redeeming are all free, forever, for everyone.
+///
+/// Three things fall out of that, and they are the reason for it:
+///
+/// - **The basket tracks NAV as tightly as the mechanism allows.** Every basis
+///   point charged on the way in or out widens the band the market price can
+///   drift inside before arbitrage pays to close it. At zero there is no band.
+/// - **A manager earns by being right, not by extracting.** They hold 100% of
+///   the starting supply, so their return is the basket appreciating — the same
+///   way every other holder makes money. There is no fee stream to harvest and
+///   nothing to dump.
+/// - **Nothing can be turned on later behind a holder's back.** These are
+///   compiled in, not configured, so no authority can raise them.
+///
+/// The fee plumbing underneath (`fee_escrow`, the accrual and claim
+/// instructions, `protocol_share_bps`) is left in place but unreachable: with
+/// every cap at zero, nothing ever accrues and there is never anything to
+/// claim. Future revenue is intended to come from mechanics that sit beside
+/// the basket rather than taxing it.
+pub const MAX_MINT_FEE_BPS: u16 = 0;
+pub const MAX_REDEEM_FEE_BPS: u16 = 0;
+pub const MAX_STREAMING_FEE_BPS: u16 = 0;
+/// Moot while the caps above are zero — there are no fees to take a share of —
+/// but still enforced on `initialize_config` so the stored value can't be
+/// nonsense if fees ever return.
 pub const MAX_PROTOCOL_SHARE_BPS: u16 = 3_000; // 30% of fees, ever
 
 /// Every fee claim (manager or protocol) pays 25% in basket tokens and 75% in

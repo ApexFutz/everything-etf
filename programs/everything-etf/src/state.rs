@@ -8,7 +8,7 @@ pub struct Config {
     pub authority: Pubkey,
     /// Wallet that receives creation fees and protocol fee payouts.
     pub treasury: Pubkey,
-    /// Flat fee charged when a basket is created (0.25 SOL by default).
+    /// Flat fee charged when a basket is created (0.1 SOL by default).
     pub creation_fee_lamports: u64,
     /// Protocol share of every fee, snapshotted onto each basket at creation.
     pub protocol_share_bps: u16,

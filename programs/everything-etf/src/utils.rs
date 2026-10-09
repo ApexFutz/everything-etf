@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program_pack::Pack;
 use anchor_spl::associated_token::get_associated_token_address_with_program_id;
-use anchor_spl::token::{self, Mint, MintTo};
+use anchor_spl::token::{self, Burn, Mint, MintTo};
 use anchor_spl::token_2022::spl_token_2022::{
     extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions},
     state::Mint as Mint2022State,
@@ -14,7 +14,63 @@ use crate::constants::BASKET_SEED;
 use crate::errors::EtfError;
 use crate::events::StreamingFeeAccrued;
 use crate::math;
-use crate::state::Basket;
+use crate::state::{Basket, CoinConfig};
+
+/// Burns $EETF and records it. **This is the only way $EETF may be burned.**
+///
+/// `CoinConfig.total_burned` is not just a dashboard number: it is the meter
+/// every public claim about the supply rests on and the only on-chain record
+/// that supply actually shrank, so a burn that doesn't increment it is a burn
+/// that never happened as far as the protocol is concerned. Keeping
+/// the CPI and the counter in one place means a new $EETF sink cannot get that
+/// pairing wrong — including the `reload()`, without which the caller's
+/// `coin_mint.supply` is the pre-burn figure and any event reporting it lies.
+///
+/// Not for basket tokens. `redeem_basket` and `claim_fees` also call
+/// `token::burn`, on a *basket* mint, and those must not touch this counter —
+/// the `CoinConfig`/`coin_mint` arguments are what keep that mistake from
+/// compiling.
+///
+/// Pass `&[]` as `signer_seeds` when the burn is authorised by a user who
+/// signed the transaction, or the coin PDA's seeds when the protocol itself is
+/// burning from an account it owns. Returns the new lifetime total, so callers
+/// can emit it without re-borrowing `coin_config`.
+pub fn burn_coin<'info>(
+    coin_config: &mut Account<'info, CoinConfig>,
+    coin_mint: &mut Account<'info, Mint>,
+    from: &AccountInfo<'info>,
+    authority: &AccountInfo<'info>,
+    token_program: &AccountInfo<'info>,
+    amount: u64,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<u64> {
+    // A zero-amount burn is a legitimate no-op (a 100%-dev fee split, say);
+    // the CPI would succeed and change nothing, so skip it. Supply is
+    // unchanged, which is why there's nothing to reload.
+    if amount == 0 {
+        return Ok(coin_config.total_burned);
+    }
+
+    token::burn(
+        CpiContext::new_with_signer(
+            token_program.clone(),
+            Burn {
+                mint: coin_mint.to_account_info(),
+                from: from.clone(),
+                authority: authority.clone(),
+            },
+            signer_seeds,
+        ),
+        amount,
+    )?;
+    coin_mint.reload()?;
+
+    coin_config.total_burned = coin_config
+        .total_burned
+        .checked_add(amount)
+        .ok_or(EtfError::MathOverflow)?;
+    Ok(coin_config.total_burned)
+}
 
 /// Picks the token program that owns an asset mint.
 pub fn token_program_for<'info>(

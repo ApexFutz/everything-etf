@@ -10,6 +10,7 @@ pub mod lower_fees;
 pub mod mint_basket;
 pub mod redeem_basket;
 pub mod seed_basket;
+pub mod update_authority;
 pub mod update_coin_terms;
 pub mod update_protocol_terms;
 
@@ -23,5 +24,6 @@ pub use lower_fees::*;
 pub use mint_basket::*;
 pub use redeem_basket::*;
 pub use seed_basket::*;
+pub use update_authority::*;
 pub use update_coin_terms::*;
 pub use update_protocol_terms::*;

@@ -16,7 +16,7 @@ pub mod utils;
 use instructions::*;
 use state::FeeRecipient;
 
-declare_id!("HVxbNmXpRw6RGZaQ4N9hZedeB8mN2DuWaDhRbqEL3YBv");
+declare_id!("9mT7xrj7xWiTPkH8pMQ8yzz8d8Fs9TacqyYQ61yPUzyq");
 
 #[program]
 pub mod everything_etf {
@@ -40,6 +40,13 @@ pub mod everything_etf {
         protocol_share_bps: u16,
     ) -> Result<()> {
         instructions::update_protocol_terms::handler(ctx, treasury, creation_fee_lamports, protocol_share_bps)
+    }
+
+    /// Hand the protocol authority to a new key. Both the current and the
+    /// incoming authority must sign, so an address nobody controls can never
+    /// be installed — see the instruction's own docs.
+    pub fn update_authority(ctx: Context<UpdateAuthority>) -> Result<()> {
+        instructions::update_authority::handler(ctx)
     }
 
     /// Mint $EETF: whole fixed supply at once, then the mint authority is
