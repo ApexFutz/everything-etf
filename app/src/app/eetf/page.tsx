@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { crankBurnTx, fetchCoinConfig } from "@/lib/etf/client";
 import { CoinConfig } from "@/lib/etf/accounts";
 import { COIN_DECIMALS, COIN_TOTAL_SUPPLY, MIN_CREATION_BURN_BPS } from "@/lib/etf/constants";
+import { readU64LE } from "@/lib/etf/codec";
 import { CREATION_FEE_USD_TARGET } from "@/lib/etf/pricing";
 import { explorerTxUrl, formatBps, formatTokens } from "@/lib/format";
 import { AddressLink, Banner, Button, Card, Pill, Stat } from "@/components/ui";
@@ -32,8 +33,8 @@ export default function EetfPage() {
         ]);
         // Raw SPL layouts: token account amount is a u64 at offset 64; mint
         // supply is a u64 at offset 36.
-        setBurnVaultBalance(vault ? vault.data.readBigUInt64LE(64) : 0n);
-        setMintSupply(mint ? mint.data.readBigUInt64LE(36) : null);
+        setBurnVaultBalance(vault ? readU64LE(vault.data, 64) : 0n);
+        setMintSupply(mint ? readU64LE(mint.data, 36) : null);
       }
       setLoadError(null);
     } catch (e) {

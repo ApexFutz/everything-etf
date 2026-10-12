@@ -6,6 +6,31 @@
  */
 import { PublicKey } from "@solana/web3.js";
 
+/**
+ * 64-bit little-endian helpers, done with `DataView` rather than Buffer's
+ * `writeBigUInt64LE` / `readBigUInt64LE`.
+ *
+ * Those methods exist on Node's Buffer but not reliably on the browser
+ * polyfill webpack substitutes — the basket list died in a real browser with
+ * "idBuf.writeBigUInt64LE is not a function" while every Node test passed,
+ * because Node and the browser were running different implementations of the
+ * same call. `DataView` is plain ECMAScript and behaves identically in both,
+ * so the Node tests now exercise the same code path the browser does.
+ */
+export function u64ToLeBytes(v: bigint | number): Buffer {
+  const b = Buffer.alloc(8);
+  new DataView(b.buffer, b.byteOffset, 8).setBigUint64(0, BigInt(v), true);
+  return b;
+}
+
+export function readU64LE(data: Buffer, offset: number): bigint {
+  return new DataView(data.buffer, data.byteOffset, data.byteLength).getBigUint64(offset, true);
+}
+
+export function readI64LE(data: Buffer, offset: number): bigint {
+  return new DataView(data.buffer, data.byteOffset, data.byteLength).getBigInt64(offset, true);
+}
+
 export class Writer {
   private chunks: Buffer[] = [];
 
@@ -23,9 +48,7 @@ export class Writer {
 
   /** `v` as a bigint or number; always written as 8 bytes, little-endian. */
   u64(v: bigint | number) {
-    const b = Buffer.alloc(8);
-    b.writeBigUInt64LE(BigInt(v), 0);
-    this.chunks.push(b);
+    this.chunks.push(u64ToLeBytes(v));
     return this;
   }
 
@@ -56,11 +79,7 @@ export class Writer {
     const len = Buffer.alloc(4);
     len.writeUInt32LE(vs.length, 0);
     this.chunks.push(len);
-    for (const v of vs) {
-      const b = Buffer.alloc(8);
-      b.writeBigUInt64LE(BigInt(v), 0);
-      this.chunks.push(b);
-    }
+    for (const v of vs) this.chunks.push(u64ToLeBytes(v));
     return this;
   }
 
@@ -92,13 +111,13 @@ export class Reader {
   }
 
   u64(): bigint {
-    const v = this.data.readBigUInt64LE(this.offset);
+    const v = readU64LE(this.data, this.offset);
     this.offset += 8;
     return v;
   }
 
   i64(): bigint {
-    const v = this.data.readBigInt64LE(this.offset);
+    const v = readI64LE(this.data, this.offset);
     this.offset += 8;
     return v;
   }

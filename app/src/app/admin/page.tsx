@@ -15,6 +15,7 @@ import {
 } from "@/lib/etf/client";
 import { Config, CoinConfig } from "@/lib/etf/accounts";
 import { COIN_DECIMALS, MAX_PROTOCOL_SHARE_BPS, MIN_CREATION_BURN_BPS } from "@/lib/etf/constants";
+import { readU64LE } from "@/lib/etf/codec";
 import { formatBaseUnits, parseToBaseUnits, explorerTxUrl } from "@/lib/format";
 import { AddressLink, Banner, Button, Card, Field, TextInput } from "@/components/ui";
 import { useSendTx } from "@/hooks/useSendTx";
@@ -41,7 +42,7 @@ export default function AdminPage() {
     if (coin) {
       const info = await connection.getAccountInfo(coin.burnVault);
       // Raw SPL token account layout: amount is a u64 at byte offset 64.
-      setBurnVaultBalance(info ? info.data.readBigUInt64LE(64) : 0n);
+      setBurnVaultBalance(info ? readU64LE(info.data, 64) : 0n);
     }
   }, [connection]);
 

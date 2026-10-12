@@ -5,6 +5,7 @@
  */
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { u64ToLeBytes } from "./codec";
 import {
   BASKET_MINT_SEED,
   BASKET_SEED,
@@ -28,9 +29,7 @@ export function coinMintPda(): [PublicKey, number] {
 
 /** `basket_count` at creation time becomes the basket's permanent id. */
 export function basketPda(id: bigint | number): [PublicKey, number] {
-  const idBuf = Buffer.alloc(8);
-  idBuf.writeBigUInt64LE(BigInt(id), 0);
-  return PublicKey.findProgramAddressSync([BASKET_SEED, idBuf], PROGRAM_ID);
+  return PublicKey.findProgramAddressSync([BASKET_SEED, u64ToLeBytes(id)], PROGRAM_ID);
 }
 
 export function basketMintPda(basket: PublicKey): [PublicKey, number] {

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { BasketWithKey, fetchCoinConfig, fetchConfig, listBasketsPage } from "@/lib/etf/client";
 import { Config, CoinConfig } from "@/lib/etf/accounts";
 import { COIN_DECIMALS } from "@/lib/etf/constants";
-import { formatBps, formatTokens } from "@/lib/format";
+import { formatBps, formatTokens, shortAddress } from "@/lib/format";
 import { AddressLink, Banner, Button, ButtonLink, Card, Stat } from "@/components/ui";
 
 const PAGE_SIZE = 10;
@@ -148,8 +148,15 @@ export default function BasketsPage() {
                         <span className="font-semibold">Basket #{b.id.toString()}</span>
                         <span className="text-xs text-muted">{b.assets.length} assets</span>
                       </div>
+                      {/* Plain text, not an AddressLink: the whole card is
+                          already a <Link>, and an anchor inside an anchor is
+                          invalid HTML that React warns about at runtime. The
+                          detail page links the manager properly. */}
                       <div className="mt-2 text-xs text-muted">
-                        Manager <AddressLink address={b.manager.toBase58()} />
+                        Manager{" "}
+                        <code className="font-mono" title={b.manager.toBase58()}>
+                          {shortAddress(b.manager.toBase58(), 4)}
+                        </code>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
                         <span>no fees</span>
