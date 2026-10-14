@@ -31,6 +31,65 @@ const TEST_TOKENS = [
   { symbol: "TMOON", name: "Test Moon" },
 ];
 
+export interface StandInSpec {
+  symbol: string;
+  name: string;
+  decimals: number;
+  /** Whole tokens to mint to the recipient. */
+  supply?: number;
+}
+
+/**
+ * Devnet stand-ins for real tokens: same symbol, name and decimals, so the
+ * launch form behaves exactly as it would on mainnet while every transaction
+ * stays on devnet.
+ *
+ * Deliberately generous with the supply — the point is to remove "go find some
+ * tokens" from the path, not to simulate scarcity.
+ */
+export async function createStandInMints(
+  connection: Connection,
+  payer: PublicKey,
+  recipient: PublicKey,
+  specs: StandInSpec[],
+): Promise<{ instructions: TransactionInstruction[]; mints: Keypair[] }> {
+  const rent = await getMinimumBalanceForRentExemptMint(connection);
+  const instructions: TransactionInstruction[] = [];
+  const mints: Keypair[] = [];
+
+  for (const spec of specs) {
+    const mint = Keypair.generate();
+    mints.push(mint);
+    const ata = getAssociatedTokenAddressSync(mint.publicKey, recipient);
+    const supply = BigInt(spec.supply ?? 1_000_000_000) * 10n ** BigInt(spec.decimals);
+    instructions.push(
+      SystemProgram.createAccount({
+        fromPubkey: payer,
+        newAccountPubkey: mint.publicKey,
+        space: MINT_SIZE,
+        lamports: rent,
+        programId: TOKEN_PROGRAM_ID,
+      }),
+      // No freeze authority: the program rejects freezable asset mints, and a
+      // stand-in that couldn't be put in a basket would defeat the point.
+      createInitializeMint2Instruction(mint.publicKey, spec.decimals, payer, null),
+      createAssociatedTokenAccountIdempotentInstruction(payer, ata, recipient, mint.publicKey),
+      createMintToInstruction(mint.publicKey, ata, payer, supply),
+      createMetadataV3Instruction({
+        mint: mint.publicKey,
+        mintAuthority: payer,
+        payer,
+        updateAuthority: payer,
+        // Metaplex caps these; a long memecoin name would fail the CPI.
+        name: spec.name.slice(0, 32),
+        symbol: spec.symbol.slice(0, 10),
+        uri: "",
+      }),
+    );
+  }
+  return { instructions, mints };
+}
+
 /**
  * Instructions (plus the fresh mint keypairs that must co-sign) to create
  * `count` brand-new SPL mints with no freeze authority, mint 1,000,000 whole

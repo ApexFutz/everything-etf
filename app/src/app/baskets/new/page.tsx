@@ -18,7 +18,8 @@ import {
   usdValueOfCoin,
   WRAPPED_SOL_MINT,
 } from "@/lib/etf/pricing";
-import { createAndFundTestMints } from "@/lib/etf/devHelpers";
+import { createAndFundTestMints, createStandInMints } from "@/lib/etf/devHelpers";
+import { recordStandIns, resolveForPricing } from "@/lib/etf/demo";
 import {
   BASKET_DECIMALS,
   COIN_DECIMALS,
@@ -26,7 +27,13 @@ import {
   MIN_ASSETS,
 } from "@/lib/etf/constants";
 import { CoinConfig, Config } from "@/lib/etf/accounts";
-import { checkEligibility, clusterOf, fetchWalletTokens, TokenOption } from "@/lib/etf/tokens";
+import {
+  checkEligibility,
+  clusterOf,
+  fetchWalletTokens,
+  MAINNET_ONLY_REASON,
+  TokenOption,
+} from "@/lib/etf/tokens";
 import { DEFAULT_RPC_URL } from "@/lib/etf/constants";
 import { explorerTxUrl, formatBps, formatTokens, parseToBaseUnits, shortAddress } from "@/lib/format";
 import { useSendTx } from "@/hooks/useSendTx";
@@ -38,7 +45,17 @@ import { useSendTx } from "@/hooks/useSendTx";
  */
 const INITIAL_SUPPLY_TOKENS = 1_000_000n;
 
-type Asset = { address: PublicKey; decimals: number; symbol: string };
+type Asset = {
+  address: PublicKey;
+  decimals: number;
+  symbol: string;
+  /**
+   * Set while a real token has been picked on devnet but its stand-in hasn't
+   * been created yet. `address` is the mainnet mint until then, which cannot
+   * be transacted against here — hence the gate before launch.
+   */
+  pendingStandIn?: { mainnet: PublicKey; name: string };
+};
 
 export default function NewBasketPage() {
   const { connection } = useConnection();
@@ -61,6 +78,8 @@ export default function NewBasketPage() {
   /** Live USD per selected asset, keyed by mint. */
   const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
   const [pricesLoaded, setPricesLoaded] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+  const [creatingStandIns, setCreatingStandIns] = useState(false);
   const [tokenOptions, setTokenOptions] = useState<TokenOption[]>([]);
   const [tokensLoading, setTokensLoading] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<TokenOption[]>([]);
@@ -143,7 +162,25 @@ export default function NewBasketPage() {
 
     const result = await checkEligibility(connection, token.mint);
     if ("error" in result) {
-      setAssetError(`${token.symbol || key.slice(0, 8)}: ${result.error}`);
+      // In demo mode a token that simply isn't on this cluster is fine — a
+      // stand-in gets created for it. Every other rejection still stands,
+      // because the program would reject it on mainnet too.
+      if (!(demoMode && result.error === MAINNET_ONLY_REASON)) {
+        setAssetError(`${token.symbol || key.slice(0, 8)}: ${result.error}`);
+        return;
+      }
+      setAssets((prev) => [
+        ...prev,
+        {
+          address: token.mint,
+          decimals: token.decimals,
+          symbol: token.symbol,
+          pendingStandIn: { mainnet: token.mint, name: token.name },
+        },
+      ]);
+      setAmounts((prev) => ({ ...prev, [key]: prev[key] ?? "1000" }));
+      setSelectedTokens((prev) => [...prev, token]);
+      setWeights(withAssetAdded);
       return;
     }
     const { decimals } = result;
@@ -208,7 +245,17 @@ export default function NewBasketPage() {
     (async () => {
       // No early return: an empty list still goes through the await, so this
       // never sets state synchronously inside the effect body.
-      const prices = await fetchUsdPrices(assets.map((a) => a.address.toBase58()));
+      // A stand-in has no market of its own; it's priced as the real token it
+      // represents. Anything that isn't a stand-in passes through unchanged.
+      const lookups = assets.map(
+        (a) => a.pendingStandIn?.mainnet.toBase58() ?? resolveForPricing([a.address])[0],
+      );
+      const byLookup = await fetchUsdPrices(lookups);
+      const prices: Record<string, number> = {};
+      assets.forEach((a, i) => {
+        const p = byLookup[lookups[i]];
+        if (p !== undefined) prices[a.address.toBase58()] = p;
+      });
       if (!cancelled) {
         setAssetPrices(prices);
         setPricesLoaded(true);
@@ -271,9 +318,75 @@ export default function NewBasketPage() {
   ]);
   const acknowledged = ackFor === termsKey;
 
+  const isDevnet = clusterOf(DEFAULT_RPC_URL) === "devnet";
+  const pendingStandIns = assets.filter((a) => a.pendingStandIn);
+
   const canSubmit = Boolean(
-    publicKey && name && symbol && amountsOk && config && coinConfig && acknowledged,
+    publicKey &&
+      name &&
+      symbol &&
+      amountsOk &&
+      config &&
+      coinConfig &&
+      acknowledged &&
+      pendingStandIns.length === 0,
   );
+
+
+  /**
+   * Creates a devnet mint for each real token picked, in one transaction, and
+   * swaps the placeholder entries for the mints that now exist. The mapping is
+   * persisted so a basket page opened later can still price these.
+   */
+  async function createStandIns() {
+    if (!publicKey) return setError("connect a wallet first");
+    setCreatingStandIns(true);
+    setError(null);
+    try {
+      const specs = pendingStandIns.map((a) => ({
+        symbol: a.symbol,
+        name: a.pendingStandIn!.name,
+        decimals: a.decimals,
+      }));
+      const { instructions, mints } = await createStandInMints(
+        connection,
+        publicKey,
+        publicKey,
+        specs,
+      );
+      const sig = await send(instructions, mints);
+      if (!sig) return;
+
+      recordStandIns(
+        pendingStandIns.map((a, i) => ({
+          standIn: mints[i].publicKey.toBase58(),
+          mainnet: a.pendingStandIn!.mainnet.toBase58(),
+          symbol: a.symbol,
+          name: a.pendingStandIn!.name,
+          decimals: a.decimals,
+        })),
+      );
+
+      const replacement = new Map(
+        pendingStandIns.map((a, i) => [a.address.toBase58(), mints[i].publicKey]),
+      );
+      setAssets((prev) =>
+        prev.map((a) => {
+          const next = replacement.get(a.address.toBase58());
+          return next ? { ...a, address: next, pendingStandIn: undefined } : a;
+        }),
+      );
+      setSelectedTokens((prev) =>
+        prev.map((t) => {
+          const next = replacement.get(t.mint.toBase58());
+          return next ? { ...t, mint: next } : t;
+        }),
+      );
+      await loadTokens();
+    } finally {
+      setCreatingStandIns(false);
+    }
+  }
 
   async function makeTestAssets() {
     if (!publicKey) return setError("connect a wallet first");
@@ -398,8 +511,50 @@ export default function NewBasketPage() {
               onAdd={addAsset}
               onRemove={removeAsset}
               max={MAX_ASSETS}
+              demoMode={isDevnet && demoMode}
             />
           </Field>
+          {isDevnet && (
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={demoMode}
+                onChange={(e) => setDemoMode(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+              />
+              <span>
+                <strong className="font-medium">Practice with real tokens</strong>
+                <span className="block text-xs text-muted">
+                  Pick any token the search finds and a devnet stand-in is created for it, with the
+                  same symbol, decimals and live price. Everything after this — the split, the
+                  costs, the launch — is the real flow, on devnet.
+                </span>
+              </span>
+            </label>
+          )}
+
+          {pendingStandIns.length > 0 && (
+            <Banner kind="info">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  {pendingStandIns.length} token{pendingStandIns.length === 1 ? "" : "s"} need
+                  {pendingStandIns.length === 1 ? "s" : ""} a devnet stand-in before you can launch:{" "}
+                  <strong>{pendingStandIns.map((a) => a.symbol).join(", ")}</strong>
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={createStandIns}
+                  disabled={creatingStandIns || pending || !publicKey}
+                >
+                  {creatingStandIns
+                    ? "Creating…"
+                    : `Create ${pendingStandIns.length} stand-in${pendingStandIns.length === 1 ? "" : "s"}`}
+                </Button>
+              </div>
+            </Banner>
+          )}
+
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" variant="secondary" onClick={makeTestAssets} disabled={minting || pending}>
               {minting ? "Minting…" : "Mint 3 test tokens to my wallet"}

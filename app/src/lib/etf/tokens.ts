@@ -50,6 +50,9 @@ export interface TokenOption {
 
 export type Cluster = "devnet" | "mainnet-beta";
 
+/** Set when a token is real but simply isn't on the cluster we're pointed at. */
+export const MAINNET_ONLY_REASON = "Mainnet token — doesn't exist on devnet";
+
 const FREEZE_REASON =
   "Has a freeze authority — baskets reject these, since whoever holds it could freeze the vault";
 
@@ -170,9 +173,7 @@ export async function searchTokens(
         ? {
             ...t,
             blockedReason:
-              verdict.missing && cluster === "devnet"
-                ? "Mainnet token — doesn't exist on devnet"
-                : verdict.error,
+              verdict.missing && cluster === "devnet" ? MAINNET_ONLY_REASON : verdict.error,
           }
         : { ...t, decimals: verdict.decimals, blockedReason: undefined };
     });

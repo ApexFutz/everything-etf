@@ -17,6 +17,7 @@ import {
 } from "@/lib/etf/client";
 import { quoteMintDeposits, quoteRedeemPayouts } from "@/lib/etf/quote";
 import { BasketNav, computeNav } from "@/lib/etf/nav";
+import { resolveForPricing } from "@/lib/etf/demo";
 import { FeeRecipient } from "@/lib/etf/instructions";
 import { Config } from "@/lib/etf/accounts";
 import { BASKET_DECIMALS } from "@/lib/etf/constants";
@@ -82,7 +83,15 @@ export default function BasketPage() {
     (async () => {
       if (!basket || supply === null || assetDecimals.length !== basket.assets.length) return;
       const balances = await fetchVaultBalances(connection, basket.pubkey, basket.assets);
-      const next = await computeNav(basket.assets, balances, assetDecimals, supply, BASKET_DECIMALS);
+      const next = await computeNav(
+        basket.assets,
+        balances,
+        assetDecimals,
+        supply,
+        BASKET_DECIMALS,
+        // Demo baskets hold devnet stand-ins; price them as the real tokens.
+        resolveForPricing(basket.assets),
+      );
       if (!cancelled) setNav(next);
     })();
     return () => {

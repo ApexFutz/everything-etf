@@ -2,8 +2,14 @@
 
 import { PublicKey } from "@solana/web3.js";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Cluster, filterTokens, searchTokens, TokenOption } from "@/lib/etf/tokens";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Cluster,
+  filterTokens,
+  MAINNET_ONLY_REASON,
+  searchTokens,
+  TokenOption,
+} from "@/lib/etf/tokens";
 import { formatTokens, shortAddress } from "@/lib/format";
 
 /**
@@ -20,6 +26,7 @@ export function TokenPicker({
   onAdd,
   onRemove,
   max,
+  demoMode = false,
 }: {
   walletTokens: TokenOption[];
   selected: TokenOption[];
@@ -28,6 +35,13 @@ export function TokenPicker({
   onAdd: (token: TokenOption) => void;
   onRemove: (mint: PublicKey) => void;
   max: number;
+  /**
+   * Devnet practice: a mainnet token is selectable, and a devnet stand-in for
+   * it is created before launch. Only the "doesn't exist here" block is
+   * lifted — a freeze authority still rules a token out, because the program
+   * would reject it on either cluster.
+   */
+  demoMode?: boolean;
 }) {
   const { connection } = useConnection();
   const [query, setQuery] = useState("");
@@ -82,7 +96,13 @@ export function TokenPicker({
     () => [...localMatches, ...remoteMatches],
     [localMatches, remoteMatches],
   );
-  const selectable = useMemo(() => matches.filter((t) => !t.blockedReason), [matches]);
+  /** In demo mode the cluster-mismatch block is lifted; real ones are not. */
+  const isBlocked = useCallback(
+    (t: TokenOption) =>
+      Boolean(t.blockedReason) && !(demoMode && t.blockedReason === MAINNET_ONLY_REASON),
+    [demoMode],
+  );
+  const selectable = useMemo(() => matches.filter((t) => !isBlocked(t)), [matches, isBlocked]);
 
   /** A pasted address neither source knows about is still usable. */
   const pastedAddress = useMemo(() => {
@@ -109,7 +129,7 @@ export function TokenPicker({
   const atMax = selected.length >= max;
 
   function choose(token: TokenOption) {
-    if (token.blockedReason) return;
+    if (isBlocked(token)) return;
     onAdd(token);
     setQuery("");
     setOpen(false);
@@ -197,7 +217,8 @@ export function TokenPicker({
           >
             {matches.map((t) => {
               const i = selectable.indexOf(t);
-              const blocked = Boolean(t.blockedReason);
+              const blocked = isBlocked(t);
+              const standIn = demoMode && t.blockedReason === MAINNET_ONLY_REASON;
               return (
                 <li key={t.mint.toBase58()}>
                   <button
@@ -227,6 +248,11 @@ export function TokenPicker({
                         {blocked && (
                           <span className="mt-0.5 block text-xs text-amber-700 dark:text-amber-400">
                             {t.blockedReason}
+                          </span>
+                        )}
+                        {standIn && (
+                          <span className="mt-0.5 block text-xs text-accent">
+                            Practice: a devnet stand-in gets created, priced off the real token
                           </span>
                         )}
                       </span>
@@ -283,8 +309,9 @@ export function TokenPicker({
 
       {cluster === "devnet" && (
         <p className="text-xs text-muted">
-          Search covers mainnet tokens, which can&apos;t be launched on devnet — only tokens in your
-          wallet can. Use the test-token button below to get some.
+          {demoMode
+            ? "Practice mode: pick any real token and a devnet stand-in is created for it, carrying its symbol, decimals and live price."
+            : "Search covers mainnet tokens, which can't be launched on devnet — only tokens in your wallet can. Use the test-token button below to get some."}
         </p>
       )}
     </div>

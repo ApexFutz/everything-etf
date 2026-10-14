@@ -59,11 +59,18 @@ export async function computeNav(
   decimals: number[],
   supply: bigint,
   basketDecimals: number,
+  /**
+   * Mint to price each asset *as*, when that differs from the mint the vault
+   * holds. Devnet stand-ins have no market of their own and are priced as the
+   * real token they represent; everything else passes through unchanged.
+   */
+  priceKeys?: string[],
 ): Promise<BasketNav> {
-  const prices = await fetchUsdPrices(assets.map((a) => a.toBase58()));
+  const keys = priceKeys ?? assets.map((a) => a.toBase58());
+  const prices = await fetchUsdPrices(keys);
 
   const valued: AssetValue[] = assets.map((mint, i) => {
-    const priceUsd = prices[mint.toBase58()] ?? null;
+    const priceUsd = prices[keys[i]] ?? null;
     const valueUsd = priceUsd === null ? null : toWhole(balances[i], decimals[i]) * priceUsd;
     return { mint, decimals: decimals[i], balance: balances[i], priceUsd, valueUsd, weight: null };
   });
