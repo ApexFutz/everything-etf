@@ -27,13 +27,7 @@ import {
   MIN_ASSETS,
 } from "@/lib/etf/constants";
 import { CoinConfig, Config } from "@/lib/etf/accounts";
-import {
-  checkEligibility,
-  clusterOf,
-  fetchWalletTokens,
-  MAINNET_ONLY_REASON,
-  TokenOption,
-} from "@/lib/etf/tokens";
+import { checkEligibility, clusterOf, fetchWalletTokens, TokenOption } from "@/lib/etf/tokens";
 import { DEFAULT_RPC_URL } from "@/lib/etf/constants";
 import { explorerTxUrl, formatBps, formatTokens, parseToBaseUnits, shortAddress } from "@/lib/format";
 import { useSendTx } from "@/hooks/useSendTx";
@@ -44,6 +38,9 @@ import { useSendTx } from "@/hooks/useSendTx";
  * question with no meaningful answer. The seeder ends up holding all of it.
  */
 const INITIAL_SUPPLY_TOKENS = 1_000_000n;
+
+/** Practice mode only makes sense where the real tokens are absent. */
+const IS_DEVNET = clusterOf(DEFAULT_RPC_URL) === "devnet";
 
 type Asset = {
   address: PublicKey;
@@ -165,7 +162,7 @@ export default function NewBasketPage() {
       // In demo mode a token that simply isn't on this cluster is fine — a
       // stand-in gets created for it. Every other rejection still stands,
       // because the program would reject it on mainnet too.
-      if (!(demoMode && result.error === MAINNET_ONLY_REASON)) {
+      if (!(demoMode && IS_DEVNET && result.missing)) {
         setAssetError(`${token.symbol || key.slice(0, 8)}: ${result.error}`);
         return;
       }
@@ -318,7 +315,6 @@ export default function NewBasketPage() {
   ]);
   const acknowledged = ackFor === termsKey;
 
-  const isDevnet = clusterOf(DEFAULT_RPC_URL) === "devnet";
   const pendingStandIns = assets.filter((a) => a.pendingStandIn);
 
   const canSubmit = Boolean(
@@ -511,10 +507,10 @@ export default function NewBasketPage() {
               onAdd={addAsset}
               onRemove={removeAsset}
               max={MAX_ASSETS}
-              demoMode={isDevnet && demoMode}
+              demoMode={IS_DEVNET && demoMode}
             />
           </Field>
-          {isDevnet && (
+          {IS_DEVNET && (
             <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-sm">
               <input
                 type="checkbox"

@@ -164,27 +164,67 @@ export function TokenPicker({
 
   return (
     <div className="space-y-2">
+      {/* The same row as the dropdown, kept after selection: liquidity and
+          verification are what decide whether a token belongs in a basket, so
+          they shouldn't vanish the moment it's picked — that's exactly when
+          someone is comparing what they've assembled. */}
       {selected.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
           {selected.map((t) => (
             <li
               key={t.mint.toBase58()}
-              className="flex items-center gap-2 rounded-full border border-border bg-surface-2 py-1 pl-2 pr-1.5 text-sm"
+              className="flex items-start justify-between gap-3 bg-surface-2 px-3 py-2 text-sm"
             >
-              {t.icon && (
-                // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote token icons; not worth a next/image remote-pattern allowlist
-                <img src={t.icon} alt="" className="h-5 w-5 rounded-full" />
-              )}
-              <span className="font-medium">{t.symbol}</span>
-              <code className="text-xs text-muted">{shortAddress(t.mint.toBase58(), 4)}</code>
-              <button
-                type="button"
-                aria-label={`Remove ${t.symbol}`}
-                onClick={() => onRemove(t.mint)}
-                className="rounded-full px-1.5 text-muted transition-colors hover:bg-border hover:text-foreground"
-              >
-                ×
-              </button>
+              <span className="flex min-w-0 gap-2.5">
+                {t.icon ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote token icons; not worth a next/image remote-pattern allowlist
+                  <img src={t.icon} alt="" className="mt-0.5 h-7 w-7 shrink-0 rounded-full" />
+                ) : (
+                  <span className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-border" />
+                )}
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium">{t.symbol}</span>
+                    {t.verified && <Badge tone="accent">verified</Badge>}
+                    {t.owned && <Badge tone="accent">in your wallet</Badge>}
+                    {t.scoreLabel === "low" && !t.owned && <Badge tone="muted">low activity</Badge>}
+                  </span>
+                  <span className="block truncate text-muted">{t.name}</span>
+                  <code className="block text-xs text-muted">
+                    {shortAddress(t.mint.toBase58(), 4)}
+                  </code>
+                </span>
+              </span>
+
+              <span className="flex shrink-0 items-start gap-2">
+                <span className="text-right text-xs text-muted">
+                  {t.owned ? (
+                    <>
+                      you hold
+                      <br />
+                      <span className="tabular-nums text-foreground">
+                        {formatTokens(t.balance ?? 0n, t.decimals)}
+                      </span>
+                    </>
+                  ) : t.liquidityUsd ? (
+                    <>
+                      liquidity
+                      <br />
+                      <span className="tabular-nums">
+                        ${Intl.NumberFormat("en-US", { notation: "compact" }).format(t.liquidityUsd)}
+                      </span>
+                    </>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${t.symbol}`}
+                  onClick={() => onRemove(t.mint)}
+                  className="rounded-full px-1.5 py-0.5 text-muted transition-colors hover:bg-border hover:text-foreground"
+                >
+                  ×
+                </button>
+              </span>
             </li>
           ))}
         </ul>

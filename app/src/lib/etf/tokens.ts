@@ -230,6 +230,9 @@ export function filterTokens(options: TokenOption[], query: string): TokenOption
 export async function checkEligibility(
   connection: Connection,
   mint: PublicKey,
-): Promise<{ decimals: number } | { error: string }> {
+): Promise<{ decimals: number } | { error: string; missing?: boolean }> {
+  // `missing` is passed through rather than narrowed away: "this mint isn't on
+  // this cluster" is a different situation from "this mint is ineligible", and
+  // callers need to tell them apart without matching on the message text.
   return classifyMint(await connection.getAccountInfo(mint));
 }
