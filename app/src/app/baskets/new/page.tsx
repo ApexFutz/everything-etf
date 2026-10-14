@@ -1,7 +1,7 @@
 "use client";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, Transaction } from "@solana/web3.js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -11,6 +11,9 @@ import { WeightAllocator } from "@/components/WeightAllocator";
 import { createBasketTx, fetchCoinConfig, fetchConfig, seedBasketTx } from "@/lib/etf/client";
 import { estimateCreateCost, CreateCostEstimate } from "@/lib/etf/costs";
 import { allocateBudget, normalize, validateAllocation } from "@/lib/etf/weights";
+import { planZapIn, ZapPlan } from "@/lib/etf/zap";
+import { buildZapLaunch, sendZapLaunch } from "@/lib/etf/zapLaunch";
+import { describeError } from "@/lib/etf/errors";
 import {
   CREATION_FEE_USD_TARGET,
   fetchUsdPrice,
@@ -56,7 +59,7 @@ type Asset = {
 
 export default function NewBasketPage() {
   const { connection } = useConnection();
-  const { publicKey } = useWallet();
+  const { publicKey, signAllTransactions } = useWallet();
   const router = useRouter();
   const { send, pending, error, setError } = useSendTx();
 
@@ -76,6 +79,17 @@ export default function NewBasketPage() {
   const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
   const [pricesLoaded, setPricesLoaded] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  /**
+   * Buy the underlying as part of launching, instead of requiring the manager
+   * to already hold all of it. Jupiter has no devnet, so this is mainnet-only;
+   * on devnet practice mode mints the stand-ins straight to the wallet, which
+   * removes the same obstacle a different way.
+   */
+  const [buyForMe, setBuyForMe] = useState(!IS_DEVNET);
+  const [slippagePct, setSlippagePct] = useState("1");
+  const [zapPlan, setZapPlan] = useState<ZapPlan | null>(null);
+  const [zapQuoting, setZapQuoting] = useState(false);
+  const [zapProgress, setZapProgress] = useState<{ done: number; total: number; label: string } | null>(null);
   const [creatingStandIns, setCreatingStandIns] = useState(false);
   const [tokenOptions, setTokenOptions] = useState<TokenOption[]>([]);
   const [tokensLoading, setTokensLoading] = useState(false);
@@ -283,9 +297,57 @@ export default function NewBasketPage() {
    * amounts — which is what seed_basket takes either way.
    */
   const canUseBudget = pricesLoaded && assets.length > 0 && unpriced.length === 0;
+  /** Primitive digest of the deposits, so effects don't see a new array each render. */
+  const allocationKey = allocations.map((a) => a?.amount.toString() ?? "-").join(",");
   const allocationError = canUseBudget ? validateAllocation(allocations, unpriced) : null;
 
   const countOk = assets.length >= MIN_ASSETS && assets.length <= MAX_ASSETS;
+  const zapEnabled = buyForMe && !IS_DEVNET && canUseBudget;
+
+  /**
+   * Quotes what the initial buy would cost in SOL. Debounced because dragging
+   * a slider would otherwise fire a Jupiter round trip per pixel, and aborted
+   * on change so a slow quote can't land after a newer one.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
+      // Checked inside the timeout, not in the effect body, so clearing the
+      // stale plan never happens synchronously during the effect.
+      if (!zapEnabled || !countOk) {
+        setZapPlan(null);
+        return;
+      }
+      setZapQuoting(true);
+      try {
+        const next = await planZapIn({
+          inputMint: WRAPPED_SOL_MINT,
+          assets: assets.map((a) => a.address),
+          // Seeding is the first deposit, so the "vault balances" the deposit
+          // maths works against are simply the amounts being deposited.
+          vaultBalances: allocations.map((x) => x?.amount ?? 0n),
+          supply: INITIAL_SUPPLY_TOKENS * 10n ** BigInt(BASKET_DECIMALS),
+          amountOut: INITIAL_SUPPLY_TOKENS * 10n ** BigInt(BASKET_DECIMALS),
+          slippageBps: Math.round(Number(slippagePct) * 100) || 100,
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) setZapPlan(next);
+      } catch {
+        if (!controller.signal.aborted) setZapPlan(null);
+      } finally {
+        if (!controller.signal.aborted) setZapQuoting(false);
+      }
+    }, 600);
+    return () => {
+      controller.abort();
+      clearTimeout(t);
+    };
+    // `allocationKey` is a primitive digest of `allocations`; depending on the
+    // array itself would re-quote every render, since its identity changes
+    // each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zapEnabled, countOk, allocationKey, slippagePct, assets]);
+
   const amountsOk =
     countOk &&
     (canUseBudget
@@ -433,24 +495,62 @@ export default function NewBasketPage() {
         redeemFeeBps: 0,
         streamingFeeBps: 0,
       });
+      const seedIxs = seedBasketTx({
+        manager: publicKey,
+        basket,
+        basketMint,
+        assets: assets.map((a) => a.address),
+        initialSupply: INITIAL_SUPPLY_TOKENS * 10n ** BigInt(BASKET_DECIMALS),
+        amounts: assets.map((a, i) =>
+          canUseBudget
+            ? allocations[i]!.amount
+            : parseToBaseUnits(amounts[a.address.toBase58()] ?? "0", a.decimals),
+        ),
+      });
+
+      // --- buy-as-you-launch ------------------------------------------------
+      if (zapEnabled && zapPlan) {
+        if (!signAllTransactions) {
+          setStep(null);
+          return setError("This wallet can't sign a batch, so the tokens have to be bought first.");
+        }
+        const steps = await buildZapLaunch({
+          connection,
+          user: publicKey,
+          plan: zapPlan,
+          symbols: assets.map((a) => a.symbol),
+          createIxs: new Transaction().add(...instructions),
+          seedIxs: new Transaction().add(...seedIxs),
+        });
+
+        // One prompt for the whole launch rather than one per leg.
+        const signed = await signAllTransactions(steps.map((st) => st.transaction));
+        const result = await sendZapLaunch(connection, signed, steps, (p) =>
+          setZapProgress({ done: p.signature ? p.index + 1 : p.index, total: p.total, label: p.step.label }),
+        );
+        setZapProgress(null);
+        setStep(null);
+
+        if ("failedAt" in result) {
+          const failed = steps[result.failedAt];
+          const landed = result.signatures.length;
+          return setError(
+            `Stopped at "${failed.label}" (step ${result.failedAt + 1} of ${steps.length}). ` +
+              (failed.kind === "swap"
+                ? `${landed} step${landed === 1 ? "" : "s"} already went through, so you now hold part of the basket's tokens — nothing was created and no $EETF was burned. Try again, or raise the slippage.`
+                : `The tokens were bought${failed.kind === "seed" ? " and the basket was created — seed it from its page" : ""}.`) +
+              ` ${describeError(result.error)}`,
+          );
+        }
+        return setDone({ id: basketCount, signature: result.signatures[result.signatures.length - 1] });
+      }
+
+      // --- manager already holds the tokens ---------------------------------
       const createSig = await send(instructions);
       if (!createSig) return setStep(null);
 
       setStep("buying");
-      const seedSig = await send(
-        seedBasketTx({
-          manager: publicKey,
-          basket,
-          basketMint,
-          assets: assets.map((a) => a.address),
-          initialSupply: INITIAL_SUPPLY_TOKENS * 10n ** BigInt(BASKET_DECIMALS),
-          amounts: assets.map((a, i) =>
-            canUseBudget
-              ? allocations[i]!.amount
-              : parseToBaseUnits(amounts[a.address.toBase58()] ?? "0", a.decimals),
-          ),
-        }),
-      );
+      const seedSig = await send(seedIxs);
       setStep(null);
       if (seedSig) setDone({ id: basketCount, signature: seedSig });
     } catch (e) {
@@ -614,6 +714,85 @@ export default function NewBasketPage() {
                 })}
               </div>
             )}
+            {!IS_DEVNET && canUseBudget && (
+              <div className="space-y-3 rounded-lg border border-border bg-surface-2 px-4 py-3">
+                <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={buyForMe}
+                    onChange={(e) => setBuyForMe(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+                  />
+                  <span>
+                    <strong className="font-medium">Buy the tokens for me</strong>
+                    <span className="block text-xs text-muted">
+                      Pays in SOL and swaps into each token at the split above, then creates and
+                      seeds the basket — all signed in one go. Leave this off if you already hold
+                      everything.
+                    </span>
+                  </span>
+                </label>
+
+                {buyForMe && (
+                  <>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="w-32">
+                        <Field label="Slippage tolerance (%)" hint="per swap">
+                          <TextInput
+                            value={slippagePct}
+                            onChange={(e) => setSlippagePct(e.target.value)}
+                            inputMode="decimal"
+                          />
+                        </Field>
+                      </div>
+                      {zapQuoting && <span className="pb-2 text-xs text-muted">Quoting…</span>}
+                    </div>
+
+                    {zapPlan && zapPlan.unroutable.length === 0 && (
+                      <dl className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <dt className="text-muted">Cost of the tokens</dt>
+                          <dd className="tabular-nums">
+                            {formatTokens(zapPlan.totalIn, 9, 5)} SOL
+                            {usd(zapPlan.totalIn) !== null && (
+                              <span className="text-muted"> ≈ {money(usd(zapPlan.totalIn)!)}</span>
+                            )}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted">
+                          <dt>Worst case at {slippagePct}% slippage</dt>
+                          <dd className="tabular-nums">
+                            {formatTokens(zapPlan.worstTotalIn, 9, 5)} SOL
+                          </dd>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted">
+                          <dt>Largest price impact</dt>
+                          <dd className="tabular-nums">
+                            {(zapPlan.worstPriceImpact * 100).toFixed(2)}%
+                          </dd>
+                        </div>
+                      </dl>
+                    )}
+
+                    {zapPlan && zapPlan.unroutable.length > 0 && (
+                      <Banner kind="warn">
+                        No swap route for {zapPlan.unroutable.length} token
+                        {zapPlan.unroutable.length === 1 ? "" : "s"}. Remove{" "}
+                        {zapPlan.unroutable.length === 1 ? "it" : "them"}, or buy{" "}
+                        {zapPlan.unroutable.length === 1 ? "it" : "them"} yourself and turn this off.
+                      </Banner>
+                    )}
+
+                    <p className="text-xs text-muted">
+                      {(zapPlan?.legs.filter((l) => l.quote).length ?? assets.length) + 2} transactions,
+                      one signature: a swap per token, then create, then seed. If a swap fails you
+                      keep whatever was bought and nothing is created.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="rounded-lg bg-accent-soft px-4 py-3">
               <div className="text-xs font-medium uppercase tracking-wide text-accent">You receive</div>
               <div className="mt-1 text-xl font-semibold tabular-nums text-accent">
@@ -817,6 +996,13 @@ export default function NewBasketPage() {
           </Card>
         )}
 
+        {zapProgress && (
+          <Banner kind="info">
+            Step {zapProgress.done + 1} of {zapProgress.total} — {zapProgress.label}. Keep this tab
+            open until it finishes.
+          </Banner>
+        )}
+
         {error && <Banner kind="error">{error}</Banner>}
 
         {done && (
@@ -842,7 +1028,9 @@ export default function NewBasketPage() {
                   ? "Connect a wallet"
                   : !acknowledged && countOk && amountsOk && name && symbol
                     ? "Confirm you've read the terms"
-                    : "Launch & buy"}
+                    : zapEnabled && buyForMe
+                      ? "Buy tokens & launch"
+                      : "Launch & buy"}
           </Button>
           {step !== null && <span className="text-xs text-muted">Two transactions — approve both.</span>}
         </div>
