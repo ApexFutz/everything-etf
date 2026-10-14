@@ -55,6 +55,37 @@ export async function fetchUsdPrice(mint: string): Promise<number | null> {
   }
 }
 
+/**
+ * Batched spot prices, keyed by mint. Mints with no market are simply absent
+ * from the result rather than defaulted to zero — a basket holding something
+ * nothing quotes must say so, not silently value it at nothing.
+ *
+ * Jupiter caps how many ids one call accepts, so this chunks.
+ */
+export async function fetchUsdPrices(mints: string[]): Promise<Record<string, number>> {
+  const unique = [...new Set(mints)];
+  const out: Record<string, number> = {};
+  const CHUNK = 50;
+
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const batch = unique.slice(i, i + CHUNK);
+    try {
+      const res = await fetch(`${JUPITER_PRICE_URL}?ids=${batch.join(",")}`, {
+        headers: { accept: "application/json" },
+      });
+      if (!res.ok) continue;
+      const body = (await res.json()) as Record<string, { usdPrice?: number } | undefined>;
+      for (const mint of batch) {
+        const p = body[mint]?.usdPrice;
+        if (typeof p === "number" && p > 0) out[mint] = p;
+      }
+    } catch {
+      // offline or rate-limited: leave this batch unpriced rather than throw
+    }
+  }
+  return out;
+}
+
 /** Base units of $EETF worth `usd` at `priceUsd` per whole coin. */
 export function coinAmountForUsd(usd: number, priceUsd: number): bigint {
   if (!(priceUsd > 0)) throw new Error("price must be positive");
