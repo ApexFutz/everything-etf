@@ -7,11 +7,14 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Banner, Button, Card, Field, Pill, TextInput } from "@/components/ui";
 import { TokenPicker } from "@/components/TokenPicker";
+import { WeightAllocator } from "@/components/WeightAllocator";
 import { createBasketTx, fetchCoinConfig, fetchConfig, seedBasketTx } from "@/lib/etf/client";
 import { estimateCreateCost, CreateCostEstimate } from "@/lib/etf/costs";
+import { allocateBudget, normalize, validateAllocation } from "@/lib/etf/weights";
 import {
   CREATION_FEE_USD_TARGET,
   fetchUsdPrice,
+  fetchUsdPrices,
   usdValueOfCoin,
   WRAPPED_SOL_MINT,
 } from "@/lib/etf/pricing";
@@ -48,6 +51,16 @@ export default function NewBasketPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  /**
+   * Starting composition. Equal is the default because it's a reasonable
+   * opening position, not because the program requires it — seed_basket takes
+   * whatever amounts it's handed.
+   */
+  const [weights, setWeights] = useState<number[]>([]);
+  const [budgetUsd, setBudgetUsd] = useState("500");
+  /** Live USD per selected asset, keyed by mint. */
+  const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
+  const [pricesLoaded, setPricesLoaded] = useState(false);
   const [tokenOptions, setTokenOptions] = useState<TokenOption[]>([]);
   const [tokensLoading, setTokensLoading] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<TokenOption[]>([]);
@@ -137,12 +150,27 @@ export default function NewBasketPage() {
     setAssets((prev) => [...prev, { address: token.mint, decimals, symbol: token.symbol }]);
     setAmounts((prev) => ({ ...prev, [key]: prev[key] ?? "1000" }));
     setSelectedTokens((prev) => [...prev, { ...token, decimals }]);
+    setWeights(withAssetAdded);
+  }
+
+  /**
+   * Weights are positional, so adding or removing a token has to reshape them
+   * rather than leave a stale array. A new token joins at the current average
+   * and the rest are renormalised, which keeps a deliberate split intact
+   * instead of resetting everything to equal on every edit.
+   */
+  function withAssetAdded(prev: number[]): number[] {
+    if (prev.length === 0) return [1];
+    const avg = 1 / (prev.length + 1);
+    return normalize([...prev.map((w) => w * (1 - avg)), avg]);
   }
 
   function removeAsset(mint: PublicKey) {
     const key = mint.toBase58();
+    const idx = assets.findIndex((a) => a.address.toBase58() === key);
     setAssets((prev) => prev.filter((a) => a.address.toBase58() !== key));
     setSelectedTokens((prev) => prev.filter((t) => t.mint.toBase58() !== key));
+    setWeights((prev) => (idx === -1 ? prev : normalize(prev.filter((_, i) => i !== idx))));
   }
 
   useEffect(() => {
@@ -173,8 +201,52 @@ export default function NewBasketPage() {
     };
   }, [coinConfig]);
 
+  // Prices for whatever is currently selected. Devnet test mints have none,
+  // which is the case the manual fallback below exists for.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // No early return: an empty list still goes through the await, so this
+      // never sets state synchronously inside the effect body.
+      const prices = await fetchUsdPrices(assets.map((a) => a.address.toBase58()));
+      if (!cancelled) {
+        setAssetPrices(prices);
+        setPricesLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assets]);
+
+  const allocatorAssets = assets.map((a) => ({
+    key: a.address.toBase58(),
+    symbol: a.symbol,
+    decimals: a.decimals,
+    priceUsd: assetPrices[a.address.toBase58()] ?? null,
+  }));
+  const { allocations, unpriced } = allocateBudget(
+    Number(budgetUsd) || 0,
+    allocatorAssets.map((a, i) => ({
+      weight: weights[i] ?? 1 / Math.max(assets.length, 1),
+      priceUsd: a.priceUsd,
+      decimals: a.decimals,
+    })),
+  );
+  /**
+   * Budget mode needs a price for every token. Devnet test mints have none, so
+   * rather than block the only cluster this runs on, fall back to entering raw
+   * amounts — which is what seed_basket takes either way.
+   */
+  const canUseBudget = pricesLoaded && assets.length > 0 && unpriced.length === 0;
+  const allocationError = canUseBudget ? validateAllocation(allocations, unpriced) : null;
+
   const countOk = assets.length >= MIN_ASSETS && assets.length <= MAX_ASSETS;
-  const amountsOk = countOk && assets.every((a) => Number(amounts[a.address.toBase58()] ?? "0") > 0);
+  const amountsOk =
+    countOk &&
+    (canUseBudget
+      ? allocationError === null && allocations.every((x) => x !== null && x.amount > 0n)
+      : assets.every((a) => Number(amounts[a.address.toBase58()] ?? "0") > 0));
   const solCost =
     (config?.creationFeeLamports ?? 0n) + (cost ? cost.rentLamports + cost.networkFeeLamports : 0n);
   const usd = (lamports: bigint) =>
@@ -192,6 +264,10 @@ export default function NewBasketPage() {
     coinConfig?.creationBurnBps,
     solCost.toString(),
     assets.map((a) => a.address.toBase58()).sort(),
+    // Changing the split changes what the basket IS, so a prior
+    // acknowledgement was for a different basket.
+    canUseBudget ? weights.map((w) => w.toFixed(4)) : null,
+    canUseBudget ? budgetUsd : null,
   ]);
   const acknowledged = ackFor === termsKey;
 
@@ -259,8 +335,10 @@ export default function NewBasketPage() {
           basketMint,
           assets: assets.map((a) => a.address),
           initialSupply: INITIAL_SUPPLY_TOKENS * 10n ** BigInt(BASKET_DECIMALS),
-          amounts: assets.map((a) =>
-            parseToBaseUnits(amounts[a.address.toBase58()] ?? "0", a.decimals),
+          amounts: assets.map((a, i) =>
+            canUseBudget
+              ? allocations[i]!.amount
+              : parseToBaseUnits(amounts[a.address.toBase58()] ?? "0", a.decimals),
           ),
         }),
       );
@@ -310,7 +388,7 @@ export default function NewBasketPage() {
         <Card className="space-y-3">
           <Field
             label="Tokens in the basket"
-            hint={`Search by ticker or name. ${MIN_ASSETS}–${MAX_ASSETS} tokens, each an equal 1/N share.`}
+            hint={`Search by ticker or name. ${MIN_ASSETS}–${MAX_ASSETS} tokens; you set the split next.`}
           >
             <TokenPicker
               walletTokens={tokenOptions}
@@ -341,28 +419,50 @@ export default function NewBasketPage() {
             <div>
               <h2 className="font-semibold">Initial buy</h2>
               <p className="mt-1 text-sm text-muted">
-                How much of each token you&apos;re putting in — this is what backs the basket on day
-                one. Equal weight means these should be worth roughly the same as each other.
+                What goes into the basket on day one, and in what proportions. You choose the
+                split — equal is just the starting point.
               </p>
             </div>
-            <div className="space-y-2">
-              {assets.map((a) => {
-                const key = a.address.toBase58();
-                return (
-                  <div key={key} className="flex items-center gap-3">
-                    <div className="w-28 shrink-0">
-                      <div className="text-sm font-medium">{a.symbol}</div>
-                      <code className="text-xs text-muted">{shortAddress(key, 4)}</code>
+
+            {canUseBudget ? (
+              <>
+                <WeightAllocator
+                  assets={allocatorAssets}
+                  weights={weights}
+                  budgetUsd={budgetUsd}
+                  allocations={allocations}
+                  onWeightsChange={setWeights}
+                  onBudgetChange={setBudgetUsd}
+                />
+                {allocationError && <Banner kind="warn">{allocationError}</Banner>}
+              </>
+            ) : (
+              <div className="space-y-3">
+                {pricesLoaded && assets.length > 0 && (
+                  <Banner kind="info">
+                    {unpriced.length} of these tokens {unpriced.length === 1 ? "has" : "have"} no
+                    price, so the budget split can&apos;t size them — enter the amounts directly
+                    instead. Normal on devnet, where test tokens have no market.
+                  </Banner>
+                )}
+                {assets.map((a) => {
+                  const key = a.address.toBase58();
+                  return (
+                    <div key={key} className="flex items-center gap-3">
+                      <div className="w-28 shrink-0">
+                        <div className="text-sm font-medium">{a.symbol}</div>
+                        <code className="text-xs text-muted">{shortAddress(key, 4)}</code>
+                      </div>
+                      <TextInput
+                        value={amounts[key] ?? ""}
+                        onChange={(e) => setAmounts((p) => ({ ...p, [key]: e.target.value }))}
+                        inputMode="decimal"
+                      />
                     </div>
-                    <TextInput
-                      value={amounts[key] ?? ""}
-                      onChange={(e) => setAmounts((p) => ({ ...p, [key]: e.target.value }))}
-                      inputMode="decimal"
-                    />
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="rounded-lg bg-accent-soft px-4 py-3">
               <div className="text-xs font-medium uppercase tracking-wide text-accent">You receive</div>
               <div className="mt-1 text-xl font-semibold tabular-nums text-accent">
@@ -383,10 +483,18 @@ export default function NewBasketPage() {
             <dl className="space-y-2 text-sm">
               <CostRow label="Your deposit">
                 <div className="text-right">
-                  {assets.map((a) => (
+                  {assets.map((a, i) => (
                     <div key={a.address.toBase58()} className="tabular-nums">
-                      {amounts[a.address.toBase58()] || "0"}{" "}
+                      {canUseBudget && allocations[i]
+                        ? formatTokens(allocations[i]!.amount, a.decimals)
+                        : amounts[a.address.toBase58()] || "0"}{" "}
                       <span className="text-muted">{a.symbol}</span>
+                      {canUseBudget && allocations[i] && (
+                        <span className="text-muted">
+                          {" "}
+                          · {(allocations[i]!.effectiveWeight * 100).toFixed(1)}%
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -492,8 +600,9 @@ export default function NewBasketPage() {
                 [
                   "These coins are the coins, forever",
                   <>
-                    All {assets.length} of them, at equal weight. Nothing can be added, removed or
-                    swapped, and the basket never rebalances — weights drift with price from here.
+                    All {assets.length} of them, in the split you set above. Nothing can be added,
+                    removed or swapped, and the basket never rebalances — so those weights drift
+                    with price from the first trade onward.
                   </>,
                 ],
                 [

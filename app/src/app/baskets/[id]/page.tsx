@@ -16,10 +16,17 @@ import {
   seedBasketTx,
 } from "@/lib/etf/client";
 import { quoteMintDeposits, quoteRedeemPayouts } from "@/lib/etf/quote";
+import { BasketNav, computeNav } from "@/lib/etf/nav";
 import { FeeRecipient } from "@/lib/etf/instructions";
 import { Config } from "@/lib/etf/accounts";
 import { BASKET_DECIMALS } from "@/lib/etf/constants";
-import { formatBaseUnits, formatBps, parseToBaseUnits, explorerTxUrl } from "@/lib/format";
+import {
+  formatBaseUnits,
+  formatBps,
+  formatTokens,
+  parseToBaseUnits,
+  explorerTxUrl,
+} from "@/lib/format";
 import { AddressLink, Banner, Button, Card, Field, Stat, TextInput } from "@/components/ui";
 import { useSendTx } from "@/hooks/useSendTx";
 
@@ -33,6 +40,7 @@ export default function BasketPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [supply, setSupply] = useState<bigint | null>(null);
   const [assetDecimals, setAssetDecimals] = useState<number[]>([]);
+  const [nav, setNav] = useState<BasketNav | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -63,6 +71,24 @@ export default function BasketPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount; refresh() is also reused as a manual post-tx reload.
     refresh();
   }, [refresh]);
+
+  /**
+   * Live composition, priced off-chain. Kept out of `refresh` because it
+   * depends on an external price API that can be slow or down, and the page
+   * must still render the chain's own numbers when it is.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!basket || supply === null || assetDecimals.length !== basket.assets.length) return;
+      const balances = await fetchVaultBalances(connection, basket.pubkey, basket.assets);
+      const next = await computeNav(basket.assets, balances, assetDecimals, supply, BASKET_DECIMALS);
+      if (!cancelled) setNav(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, basket, supply, assetDecimals]);
 
   if (loading && !basket) {
     return (
@@ -100,26 +126,73 @@ export default function BasketPage() {
 
       <Card>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat label="Supply" value={formatBaseUnits(supply, BASKET_DECIMALS)} />
+          <Stat label="Supply" value={formatTokens(supply, BASKET_DECIMALS, 4)} />
           <Stat label="Fees" value="None" sub="mint, redeem and holding are all free" />
           <Stat
             label="Manager fees accrued"
-            value={formatBaseUnits(basket.managerFeesAccrued, BASKET_DECIMALS)}
+            value={formatTokens(basket.managerFeesAccrued, BASKET_DECIMALS, 4)}
           />
           <Stat
             label="Protocol fees accrued"
-            value={formatBaseUnits(basket.protocolFeesAccrued, BASKET_DECIMALS)}
+            value={formatTokens(basket.protocolFeesAccrued, BASKET_DECIMALS, 4)}
           />
           <Stat label="Protocol share" value={formatBps(basket.protocolShareBps)} />
           <Stat label="Assets" value={basket.assets.length} />
         </div>
-        <div className="mt-4 space-y-1 text-sm">
-          {basket.assets.map((a, i) => (
-            <div key={a.toBase58()} className="flex justify-between">
-              <AddressLink address={a.toBase58()} chars={6} />
-              <span className="text-muted">{assetDecimals[i]} decimals</span>
-            </div>
-          ))}
+        <div className="mt-4">
+          <div className="mb-2 flex items-baseline justify-between text-sm">
+            <span className="font-medium">What&apos;s in it</span>
+            {nav && nav.totalUsd > 0 && (
+              <span className="text-muted">
+                ${nav.totalUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} total ·{" "}
+                <span className="tabular-nums">
+                  ${nav.navPerToken < 0.01 ? nav.navPerToken.toPrecision(3) : nav.navPerToken.toFixed(4)}
+                </span>{" "}
+                per token
+              </span>
+            )}
+          </div>
+          <div className="space-y-1.5 text-sm">
+            {basket.assets.map((a, i) => {
+              const v = nav?.assets[i];
+              return (
+                <div key={a.toBase58()}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <AddressLink address={a.toBase58()} chars={6} />
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {v?.weight != null ? (
+                        <>
+                          <span className="text-foreground">{(v.weight * 100).toFixed(1)}%</span>
+                          {v.valueUsd != null && <> · ${v.valueUsd.toFixed(2)}</>}
+                        </>
+                      ) : (
+                        <>{assetDecimals[i]} decimals</>
+                      )}
+                    </span>
+                  </div>
+                  {v?.weight != null && (
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-2">
+                      <div
+                        className="h-full rounded-full bg-accent"
+                        style={{ width: `${Math.max(v.weight * 100, 0.5)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {nav && nav.unpriced.length > 0 && (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              {nav.unpriced.length} token{nav.unpriced.length === 1 ? " has" : "s have"} no price —
+              the total above excludes {nav.unpriced.length === 1 ? "it" : "them"}, so it understates
+              the basket.
+            </p>
+          )}
+          <p className="mt-2 text-xs text-muted">
+            Live weights, not the ones it launched with. Nothing rebalances, so these move with
+            price.
+          </p>
         </div>
       </Card>
 

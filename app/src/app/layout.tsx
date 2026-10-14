@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Everything ETF — equal-weight basket tokens on Solana",
+  title: "Everything ETF — on-chain basket tokens on Solana",
   description:
-    "Launch an equal-weight basket of Solana tokens. Mint and redeem in kind at NAV, with every basket launch permanently burning $EETF supply.",
+    "Launch a basket of Solana tokens in any split you choose. Mint and redeem in kind at NAV, with every basket launch permanently burning $EETF supply.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

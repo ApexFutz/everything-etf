@@ -25,10 +25,15 @@ export function Stat({
     accent: "text-accent",
     burn: "text-burn",
   }[tone];
+  // min-w-0 + break-words: these sit in grid cells, and a 9-decimal token
+  // amount is long enough to overflow its track and collide with the next
+  // stat rather than wrapping inside its own.
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
-      <div className={`mt-1 text-lg font-semibold tabular-nums ${valueTone}`}>{value}</div>
+      <div className={`mt-1 break-words text-lg font-semibold tabular-nums ${valueTone}`}>
+        {value}
+      </div>
       {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </div>
   );

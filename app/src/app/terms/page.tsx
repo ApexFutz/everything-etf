@@ -173,8 +173,8 @@ export default function TermsPage() {
                 `The coins you pick are the coins forever. There is no adding, removing or swapping, and between ${MIN_ASSETS} and ${MAX_ASSETS} are allowed.`,
               ],
               [
-                "Weights are equal and do not rebalance",
-                "Every asset gets an equal share by design. The basket does not rebalance, so weights drift with price and the basket tracks whatever the coins do from here.",
+                "The starting split is set at launch, and nothing rebalances",
+                "The creator chooses each token's share when the basket is seeded. After that the basket never rebalances, so those weights drift with price — a basket seeded 25/25/25/25 reads 40/20/20/20 once one token doubles. Buyers see the live weights, not the starting ones.",
               ],
               [
                 "The name, symbol and metadata are frozen",

@@ -292,7 +292,7 @@ function BasketDiagram() {
         </text>
       </svg>
       <p className="mt-2 text-center text-xs text-muted">
-        Each asset is 1/N of the basket by design. Redeem any time for your share of all of them.
+        The creator sets the split at launch. Redeem any time for your share of all of them.
       </p>
     </div>
   );
