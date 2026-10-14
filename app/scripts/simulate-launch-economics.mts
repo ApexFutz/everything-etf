@@ -56,7 +56,8 @@ async function main() {
 
   const supply = Number(COIN_TOTAL_SUPPLY / 1_000_000_000n); // whole coins
   const coinPrice = fdv / supply;
-  const feeUsd = CREATION_FEE_USD_TARGET;
+  // Overridable so fee levels can be swept without editing the constant.
+  const feeUsd = Number(arg("fee-usd", String(CREATION_FEE_USD_TARGET)));
   const burnShare = burnBps / 10_000;
   const feeCoins = feeUsd / coinPrice;
 
