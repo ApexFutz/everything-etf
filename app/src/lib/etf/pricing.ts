@@ -62,9 +62,15 @@ export async function fetchUsdPrice(mint: string): Promise<number | null> {
  *
  * Jupiter caps how many ids one call accepts, so this chunks.
  */
-export async function fetchUsdPrices(mints: string[]): Promise<Record<string, number>> {
+export interface PriceData {
+  usdPrice: number;
+  /** Percent move over 24h, e.g. -4.5. Absent when the source doesn't report it. */
+  change24h?: number;
+}
+
+export async function fetchPriceData(mints: string[]): Promise<Record<string, PriceData>> {
   const unique = [...new Set(mints)];
-  const out: Record<string, number> = {};
+  const out: Record<string, PriceData> = {};
   const CHUNK = 50;
 
   for (let i = 0; i < unique.length; i += CHUNK) {
@@ -74,16 +80,31 @@ export async function fetchUsdPrices(mints: string[]): Promise<Record<string, nu
         headers: { accept: "application/json" },
       });
       if (!res.ok) continue;
-      const body = (await res.json()) as Record<string, { usdPrice?: number } | undefined>;
+      const body = (await res.json()) as Record<
+        string,
+        { usdPrice?: number; priceChange24h?: number } | undefined
+      >;
       for (const mint of batch) {
         const p = body[mint]?.usdPrice;
-        if (typeof p === "number" && p > 0) out[mint] = p;
+        if (typeof p === "number" && p > 0) {
+          const change = body[mint]?.priceChange24h;
+          out[mint] = {
+            usdPrice: p,
+            change24h: typeof change === "number" ? change : undefined,
+          };
+        }
       }
     } catch {
       // offline or rate-limited: leave this batch unpriced rather than throw
     }
   }
   return out;
+}
+
+/** Prices only, for callers that don't care about the 24h move. */
+export async function fetchUsdPrices(mints: string[]): Promise<Record<string, number>> {
+  const data = await fetchPriceData(mints);
+  return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v.usdPrice]));
 }
 
 /** Base units of $EETF worth `usd` at `priceUsd` per whole coin. */

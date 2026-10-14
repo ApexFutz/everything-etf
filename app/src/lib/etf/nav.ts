@@ -10,8 +10,11 @@
  * of the assets backing it. Those are the same number only when arbitrage is
  * working, which is the whole point of charging nothing to mint or redeem.
  */
-import { PublicKey } from "@solana/web3.js";
-import { fetchUsdPrices } from "./pricing";
+import { AccountInfo, Connection, PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { readU64LE } from "./codec";
+import { resolveForPricing } from "./demo";
+import { fetchPriceData } from "./pricing";
 
 export interface AssetValue {
   mint: PublicKey;
@@ -24,6 +27,8 @@ export interface AssetValue {
   valueUsd: number | null;
   /** Share of the basket's total value, 0–1. Null when unpriced. */
   weight: number | null;
+  /** Percent move over 24h, e.g. -4.5. Absent when the source doesn't report one. */
+  change24h?: number;
 }
 
 export interface BasketNav {
@@ -40,6 +45,15 @@ export interface BasketNav {
    * showing a number that's too low.
    */
   unpriced: PublicKey[];
+  /**
+   * The basket's 24h move: each asset's move weighted by how much of the
+   * basket it currently is. Null when nothing priced reports one.
+   *
+   * This is what the basket DID, not what a holder made. It ignores mints and
+   * redeems, and there is no on-chain record of NAV at launch to measure a
+   * since-inception return against.
+   */
+  change24h: number | null;
 }
 
 /** Whole-token count from a raw base-unit amount. */
@@ -67,12 +81,21 @@ export async function computeNav(
   priceKeys?: string[],
 ): Promise<BasketNav> {
   const keys = priceKeys ?? assets.map((a) => a.toBase58());
-  const prices = await fetchUsdPrices(keys);
+  const prices = await fetchPriceData(keys);
 
   const valued: AssetValue[] = assets.map((mint, i) => {
-    const priceUsd = prices[keys[i]] ?? null;
+    const data = prices[keys[i]];
+    const priceUsd = data?.usdPrice ?? null;
     const valueUsd = priceUsd === null ? null : toWhole(balances[i], decimals[i]) * priceUsd;
-    return { mint, decimals: decimals[i], balance: balances[i], priceUsd, valueUsd, weight: null };
+    return {
+      mint,
+      decimals: decimals[i],
+      balance: balances[i],
+      priceUsd,
+      valueUsd,
+      weight: null,
+      change24h: data?.change24h,
+    };
   });
 
   const totalUsd = valued.reduce((sum, a) => sum + (a.valueUsd ?? 0), 0);
@@ -80,8 +103,19 @@ export async function computeNav(
     a.weight = a.valueUsd === null || totalUsd === 0 ? null : a.valueUsd / totalUsd;
   }
 
+  // Weighted by current value, so a 50% asset moves the basket twice as much as
+  // a 25% one. Assets with no reported move are left out of both sides rather
+  // than counted as flat, which would drag the result toward zero.
+  const movers = valued.filter((a) => a.change24h !== undefined && a.valueUsd !== null);
+  const moverValue = movers.reduce((acc, a) => acc + a.valueUsd!, 0);
+  const change24h =
+    movers.length > 0 && moverValue > 0
+      ? movers.reduce((acc, a) => acc + a.change24h! * (a.valueUsd! / moverValue), 0)
+      : null;
+
   const wholeSupply = toWhole(supply, basketDecimals);
   return {
+    change24h,
     assets: valued,
     totalUsd,
     supply,
@@ -100,4 +134,79 @@ export async function computeNav(
 export function tokensForUsd(usd: number, nav: BasketNav, basketDecimals: number): bigint {
   if (!(nav.navPerToken > 0)) throw new Error("basket has no priced value");
   return BigInt(Math.floor((usd / nav.navPerToken) * 10 ** basketDecimals));
+}
+
+/**
+ * NAV for a whole page of baskets at once.
+ *
+ * The per-basket path would be two RPC round trips per asset; ten baskets of
+ * ten assets is two hundred calls and a list page that takes seconds to show
+ * anything. This reads every vault and every mint across every basket in
+ * batched `getMultipleAccountsInfo` calls instead, then prices the lot in one
+ * request.
+ *
+ * Layouts are read directly rather than through spl-token's parsers because
+ * those take one account at a time: SPL token account amount is a u64 at 64,
+ * mint decimals a u8 at 44.
+ */
+export async function fetchBasketNavs(
+  connection: Connection,
+  baskets: { pubkey: PublicKey; assets: PublicKey[] }[],
+  supplies: bigint[],
+  basketDecimals: number,
+): Promise<(BasketNav | null)[]> {
+  if (baskets.length === 0) return [];
+
+  // Flatten to one address list, remembering where each basket's slice starts.
+  const vaults: PublicKey[] = [];
+  const offsets: number[] = [];
+  for (const b of baskets) {
+    offsets.push(vaults.length);
+    for (const a of b.assets) vaults.push(getAssociatedTokenAddressSync(a, b.pubkey, true));
+  }
+  const mints = [...new Set(baskets.flatMap((b) => b.assets.map((a) => a.toBase58())))];
+
+  const [vaultInfos, mintInfos] = await Promise.all([
+    getMultipleBatched(connection, vaults),
+    getMultipleBatched(connection, mints.map((m) => new PublicKey(m))),
+  ]);
+
+  const decimalsByMint = new Map<string, number>();
+  mints.forEach((m, i) => {
+    const info = mintInfos[i];
+    if (info && info.data.length >= 82) decimalsByMint.set(m, info.data[44]);
+  });
+
+  return Promise.all(
+    baskets.map(async (b, i) => {
+      const start = offsets[i];
+      const decimals = b.assets.map((a) => decimalsByMint.get(a.toBase58()));
+      // A basket we can't read every decimal for would be mis-valued by orders
+      // of magnitude, so report nothing rather than something wrong.
+      if (decimals.some((d) => d === undefined)) return null;
+
+      const balances = b.assets.map((_, j) => {
+        const info = vaultInfos[start + j];
+        return info && info.data.length >= 72 ? readU64LE(info.data, 64) : 0n;
+      });
+
+      return computeNav(
+        b.assets,
+        balances,
+        decimals as number[],
+        supplies[i],
+        basketDecimals,
+        resolveForPricing(b.assets),
+      );
+    }),
+  );
+}
+
+/** `getMultipleAccountsInfo` caps at 100 keys per call. */
+async function getMultipleBatched(connection: Connection, keys: PublicKey[]) {
+  const out: (AccountInfo<Buffer> | null)[] = [];
+  for (let i = 0; i < keys.length; i += 100) {
+    out.push(...(await connection.getMultipleAccountsInfo(keys.slice(i, i + 100))));
+  }
+  return out;
 }

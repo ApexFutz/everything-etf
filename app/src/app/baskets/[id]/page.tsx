@@ -18,6 +18,7 @@ import {
 import { quoteMintDeposits, quoteRedeemPayouts } from "@/lib/etf/quote";
 import { BasketNav, computeNav } from "@/lib/etf/nav";
 import { resolveForPricing } from "@/lib/etf/demo";
+import { Creator } from "@/components/Creator";
 import { FeeRecipient } from "@/lib/etf/instructions";
 import { Config } from "@/lib/etf/accounts";
 import { BASKET_DECIMALS } from "@/lib/etf/constants";
@@ -127,8 +128,11 @@ export default function BasketPage() {
     <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
       <div>
         <h1 className="text-xl font-semibold">Basket #{basket.id.toString()}</h1>
-        <p className="text-sm text-muted">
-          Manager <AddressLink address={basket.manager.toBase58()} /> · mint{" "}
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+          <span>by</span>
+          <Creator address={basket.manager} size="md" showAddress={false} />
+          <AddressLink address={basket.manager.toBase58()} />
+          <span>· mint</span>
           <AddressLink address={basket.mint.toBase58()} />
         </p>
       </div>
@@ -158,6 +162,19 @@ export default function BasketPage() {
                   ${nav.navPerToken < 0.01 ? nav.navPerToken.toPrecision(3) : nav.navPerToken.toFixed(4)}
                 </span>{" "}
                 per token
+                {nav.change24h !== null && (
+                  <span
+                    className={
+                      nav.change24h >= 0
+                        ? " text-emerald-600 dark:text-emerald-400"
+                        : " text-red-600 dark:text-red-400"
+                    }
+                  >
+                    {" · "}
+                    {nav.change24h >= 0 ? "+" : ""}
+                    {nav.change24h.toFixed(2)}% 24h
+                  </span>
+                )}
               </span>
             )}
           </div>
@@ -173,6 +190,19 @@ export default function BasketPage() {
                         <>
                           <span className="text-foreground">{(v.weight * 100).toFixed(1)}%</span>
                           {v.valueUsd != null && <> · ${v.valueUsd.toFixed(2)}</>}
+                          {v.change24h !== undefined && (
+                            <span
+                              className={
+                                v.change24h >= 0
+                                  ? " text-emerald-600 dark:text-emerald-400"
+                                  : " text-red-600 dark:text-red-400"
+                              }
+                            >
+                              {" "}
+                              {v.change24h >= 0 ? "+" : ""}
+                              {v.change24h.toFixed(2)}%
+                            </span>
+                          )}
                         </>
                       ) : (
                         <>{assetDecimals[i]} decimals</>

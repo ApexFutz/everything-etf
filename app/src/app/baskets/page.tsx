@@ -5,8 +5,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BasketWithKey, fetchCoinConfig, fetchConfig, listBasketsPage } from "@/lib/etf/client";
 import { Config, CoinConfig } from "@/lib/etf/accounts";
-import { COIN_DECIMALS } from "@/lib/etf/constants";
-import { formatBps, formatTokens, shortAddress } from "@/lib/format";
+import { getMint } from "@solana/spl-token";
+import { BASKET_DECIMALS, COIN_DECIMALS } from "@/lib/etf/constants";
+import { BasketNav, fetchBasketNavs } from "@/lib/etf/nav";
+import { Creator } from "@/components/Creator";
+import { formatBps, formatTokens } from "@/lib/format";
 import { AddressLink, Banner, Button, ButtonLink, Card, Stat } from "@/components/ui";
 
 const PAGE_SIZE = 10;
@@ -20,6 +23,39 @@ export default function BasketsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  /**
+   * NAV per basket, keyed by basket pubkey. Loaded after the list so cards
+   * appear immediately and fill in, rather than blocking on an external
+   * price API before anything is visible.
+   */
+  const [navs, setNavs] = useState<Record<string, BasketNav>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (baskets.length === 0) return;
+      const supplies = await Promise.all(
+        baskets.map(async (b) => {
+          try {
+            return (await getMint(connection, b.mint)).supply;
+          } catch {
+            return 0n;
+          }
+        }),
+      );
+      const results = await fetchBasketNavs(connection, baskets, supplies, BASKET_DECIMALS);
+      if (cancelled) return;
+      const next: Record<string, BasketNav> = {};
+      baskets.forEach((b, i) => {
+        const n = results[i];
+        if (n) next[b.pubkey.toBase58()] = n;
+      });
+      setNavs(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, baskets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,22 +180,34 @@ export default function BasketsPage() {
                 {baskets.map((b) => (
                   <Link key={b.pubkey.toBase58()} href={`/baskets/${b.id}`} className="group">
                     <Card className="h-full transition-colors group-hover:border-accent">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-baseline justify-between gap-2">
                         <span className="font-semibold">Basket #{b.id.toString()}</span>
-                        <span className="text-xs text-muted">{b.assets.length} assets</span>
+                        {navs[b.pubkey.toBase58()]?.totalUsd ? (
+                          <span className="shrink-0 text-sm tabular-nums">
+                            $
+                            {navs[b.pubkey.toBase58()].totalUsd.toLocaleString("en-US", {
+                              maximumFractionDigits: 0,
+                            })}
+                          </span>
+                        ) : null}
                       </div>
-                      {/* Plain text, not an AddressLink: the whole card is
-                          already a <Link>, and an anchor inside an anchor is
-                          invalid HTML that React warns about at runtime. The
-                          detail page links the manager properly. */}
-                      <div className="mt-2 text-xs text-muted">
-                        Manager{" "}
-                        <code className="font-mono" title={b.manager.toBase58()}>
-                          {shortAddress(b.manager.toBase58(), 4)}
-                        </code>
+                      {/* Creator renders plain text, not a link: the whole
+                          card is already a <Link>, and an anchor inside an
+                          anchor is invalid HTML React warns about at runtime. */}
+                      <div className="mt-1.5 text-xs text-muted">
+                        <Creator address={b.manager} />
                       </div>
+
+                      <BasketPreview nav={navs[b.pubkey.toBase58()]} />
+
                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+                        <span>{b.assets.length} assets</span>
                         <span>no fees</span>
+                        {navs[b.pubkey.toBase58()]?.unpriced.length ? (
+                          <span className="text-amber-700 dark:text-amber-400">
+                            {navs[b.pubkey.toBase58()].unpriced.length} unpriced
+                          </span>
+                        ) : null}
                       </div>
                     </Card>
                   </Link>
@@ -177,5 +225,53 @@ export default function BasketsPage() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Composition at a glance: a stacked bar of current weights, the per-token
+ * value, and the 24h move.
+ *
+ * The move is value-weighted across the assets that report one, so it reflects
+ * what the basket did rather than an unweighted average of its parts. It is
+ * not a holder return -- there is no on-chain record of NAV at launch to
+ * measure that against.
+ */
+function BasketPreview({ nav }: { nav?: BasketNav }) {
+  if (!nav || nav.totalUsd <= 0) return null;
+  return (
+    <>
+      <div className="mt-3 flex h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+        {nav.assets.map((a, i) => (
+          <span
+            key={a.mint.toBase58()}
+            title={`${((a.weight ?? 0) * 100).toFixed(1)}%`}
+            style={{
+              width: `${(a.weight ?? 0) * 100}%`,
+              // Hues spread around the wheel so adjacent slices stay apart.
+              backgroundColor: `hsl(${(i * 360) / Math.max(nav.assets.length, 1)} 55% 55%)`,
+            }}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-muted">
+        <span className="tabular-nums">
+          ${nav.navPerToken < 0.01 ? nav.navPerToken.toPrecision(3) : nav.navPerToken.toFixed(4)} /
+          token
+        </span>
+        {nav.change24h !== null && (
+          <span
+            className={`tabular-nums ${
+              nav.change24h >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400"
+            }`}
+          >
+            {nav.change24h >= 0 ? "+" : ""}
+            {nav.change24h.toFixed(2)}% 24h
+          </span>
+        )}
+      </div>
+    </>
   );
 }
