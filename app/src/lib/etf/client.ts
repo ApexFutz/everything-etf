@@ -10,7 +10,16 @@ import {
   getAccount,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { Basket, Config, CoinConfig, decodeBasket, decodeConfig, decodeCoinConfig } from "./accounts";
+import {
+  Basket,
+  Config,
+  CoinConfig,
+  Profile,
+  decodeBasket,
+  decodeConfig,
+  decodeCoinConfig,
+  decodeProfile,
+} from "./accounts";
 import * as ix from "./instructions";
 import {
   basketMintPda,
@@ -20,6 +29,7 @@ import {
   coinMintPda,
   configPda,
   feeEscrowAta,
+  profilePda,
 } from "./pda";
 import { PROGRAM_ID } from "./constants";
 
@@ -262,6 +272,50 @@ export function updateCoinTermsTx(args: {
       creationBurnBps: args.creationBurnBps,
     }),
   ];
+}
+
+/**
+ * Sets the caller's display name. One instruction for both create and update —
+ * the account is a PDA seeded by the signer, so the program handles whichever
+ * case applies.
+ */
+export function setProfileTx(args: { owner: PublicKey; name: string }) {
+  return [ix.setProfile({ owner: args.owner, profile: profilePda(args.owner)[0], name: args.name })];
+}
+
+/** A wallet's chosen name, or null when it has never set one. */
+export async function fetchProfile(
+  connection: Connection,
+  owner: PublicKey,
+): Promise<Profile | null> {
+  const info = await connection.getAccountInfo(profilePda(owner)[0]);
+  return info ? decodeProfile(info.data) : null;
+}
+
+/**
+ * Names for many wallets at once, keyed by base58 address. Used by the basket
+ * list, where fetching one at a time would be a round trip per card.
+ */
+export async function fetchProfiles(
+  connection: Connection,
+  owners: PublicKey[],
+): Promise<Record<string, string>> {
+  const unique = [...new Set(owners.map((o) => o.toBase58()))];
+  const infos = await connection.getMultipleAccountsInfo(
+    unique.map((o) => profilePda(new PublicKey(o))[0]),
+  );
+  const out: Record<string, string> = {};
+  unique.forEach((owner, i) => {
+    const info = infos[i];
+    if (!info) return;
+    try {
+      out[owner] = decodeProfile(info.data).name;
+    } catch {
+      // An account at that PDA that isn't a Profile is not worth failing the
+      // whole page over; the derived name stands in.
+    }
+  });
+  return out;
 }
 
 export function crankBurnTx(args: { cranker: PublicKey }) {

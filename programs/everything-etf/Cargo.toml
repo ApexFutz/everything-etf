@@ -18,7 +18,11 @@ no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
 [dependencies]
-anchor-lang = "0.31.1"
+# init-if-needed is enabled for one account: the per-wallet Profile PDA in
+# set_profile. It is seeded by the signer and holds only a name that same
+# signer may overwrite, so there is nothing to drain and no state an attacker
+# could usefully reset. Do not reach for it elsewhere without that being true.
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.31.1", features = ["metadata"] }
 
 [lints.rust]

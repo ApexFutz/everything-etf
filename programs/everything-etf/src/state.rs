@@ -78,3 +78,24 @@ pub struct CoinConfig {
     pub bump: u8,
     pub mint_bump: u8,
 }
+
+/// A wallet's chosen display name.
+///
+/// One per wallet, at a PDA seeded by the wallet itself, so the owner is the
+/// address and there is nothing to look up in reverse. Holds no value and
+/// confers nothing — it exists only so a creator can be recognised by
+/// something other than a base58 string.
+///
+/// Names are deliberately **not** unique. Enforcing that on chain needs a
+/// second account keyed by the name itself, and it would buy less than it
+/// looks: the defence against someone calling themselves "Jupiter" is that
+/// every interface shows the address alongside the name, which is true whether
+/// or not the name is unique.
+#[account]
+#[derive(InitSpace)]
+pub struct Profile {
+    pub owner: Pubkey,
+    #[max_len(32)]
+    pub name: String,
+    pub bump: u8,
+}

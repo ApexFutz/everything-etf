@@ -865,6 +865,36 @@ impl Env {
         self.send(&[ix], &[&signer])
     }
 
+    /// Profile PDA for a wallet.
+    pub fn profile_pda(owner: Pubkey) -> Pubkey {
+        Pubkey::find_program_address(&[PROFILE_SEED, owner.as_ref()], &everything_etf::ID).0
+    }
+
+    pub fn set_profile(
+        &mut self,
+        signer: &Keypair,
+        name: &str,
+    ) -> Result<TransactionMetadata, FailedTransactionMetadata> {
+        let owner = pubkey_of(signer);
+        let ix = etf_instruction(
+            etf_accounts::SetProfile {
+                owner,
+                profile: Self::profile_pda(owner),
+                system_program: anchor_lang::system_program::ID,
+            },
+            etf_ix::SetProfile {
+                name: name.to_string(),
+            },
+            vec![],
+        );
+        let signer = signer.insecure_clone();
+        self.send(&[ix], &[&signer])
+    }
+
+    pub fn profile_account(&self, owner: Pubkey) -> everything_etf::state::Profile {
+        self.anchor_account(Self::profile_pda(owner))
+    }
+
     pub fn update_protocol_terms(
         &mut self,
         treasury: Pubkey,

@@ -3,7 +3,13 @@
 import { useConnection } from "@solana/wallet-adapter-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { BasketWithKey, fetchCoinConfig, fetchConfig, listBasketsPage } from "@/lib/etf/client";
+import {
+  BasketWithKey,
+  fetchCoinConfig,
+  fetchConfig,
+  fetchProfiles,
+  listBasketsPage,
+} from "@/lib/etf/client";
 import { Config, CoinConfig } from "@/lib/etf/accounts";
 import { getMint } from "@solana/spl-token";
 import { BASKET_DECIMALS, COIN_DECIMALS } from "@/lib/etf/constants";
@@ -29,6 +35,20 @@ export default function BasketsPage() {
    * price API before anything is visible.
    */
   const [navs, setNavs] = useState<Record<string, BasketNav>>({});
+  /** Chosen display names, keyed by manager address. */
+  const [profiles, setProfiles] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (baskets.length === 0) return;
+      const names = await fetchProfiles(connection, baskets.map((b) => b.manager));
+      if (!cancelled) setProfiles(names);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, baskets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +215,7 @@ export default function BasketsPage() {
                           card is already a <Link>, and an anchor inside an
                           anchor is invalid HTML React warns about at runtime. */}
                       <div className="mt-1.5 text-xs text-muted">
-                        <Creator address={b.manager} />
+                        <Creator address={b.manager} chosenName={profiles[b.manager.toBase58()]} />
                       </div>
 
                       <BasketPreview nav={navs[b.pubkey.toBase58()]} />

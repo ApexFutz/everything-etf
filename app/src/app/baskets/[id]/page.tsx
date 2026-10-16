@@ -14,6 +14,7 @@ import {
   mintBasketTx,
   redeemBasketTx,
   seedBasketTx,
+  fetchProfile,
 } from "@/lib/etf/client";
 import { quoteMintDeposits, quoteRedeemPayouts } from "@/lib/etf/quote";
 import { BasketNav, computeNav } from "@/lib/etf/nav";
@@ -43,6 +44,7 @@ export default function BasketPage() {
   const [supply, setSupply] = useState<bigint | null>(null);
   const [assetDecimals, setAssetDecimals] = useState<number[]>([]);
   const [nav, setNav] = useState<BasketNav | null>(null);
+  const [managerName, setManagerName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -100,6 +102,18 @@ export default function BasketPage() {
     };
   }, [connection, basket, supply, assetDecimals]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!basket) return;
+      const p = await fetchProfile(connection, basket.manager);
+      if (!cancelled) setManagerName(p?.name ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, basket]);
+
   if (loading && !basket) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-10">
@@ -130,7 +144,7 @@ export default function BasketPage() {
         <h1 className="text-xl font-semibold">Basket #{basket.id.toString()}</h1>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
           <span>by</span>
-          <Creator address={basket.manager} size="md" showAddress={false} />
+          <Creator address={basket.manager} size="md" showAddress={false} chosenName={managerName} />
           <AddressLink address={basket.manager.toBase58()} />
           <span>· mint</span>
           <AddressLink address={basket.mint.toBase58()} />

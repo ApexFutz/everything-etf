@@ -11,12 +11,18 @@ import {
   BASKET_SEED,
   COIN_MINT_SEED,
   COIN_SEED,
+  PROFILE_SEED,
   CONFIG_SEED,
   PROGRAM_ID,
 } from "./constants";
 
 export function configPda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([CONFIG_SEED], PROGRAM_ID);
+}
+
+/** One per wallet: the owner is the seed, so there is nothing to look up. */
+export function profilePda(owner: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([PROFILE_SEED, owner.toBuffer()], PROGRAM_ID);
 }
 
 export function coinConfigPda(): [PublicKey, number] {

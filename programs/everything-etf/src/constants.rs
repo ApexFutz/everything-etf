@@ -79,5 +79,10 @@ pub const MIN_CREATION_BURN_BPS: u16 = 5_000; // 50%
 pub const MAX_CREATION_FEE_COIN: u64 = 10_000_000 * 1_000_000_000;
 
 /// Coin PDA seeds.
+/// Display-name limits. 32 bytes matches the Metaplex name cap, which is
+/// already the longest string this program stores.
+pub const MAX_PROFILE_NAME_LEN: usize = 32;
+pub const PROFILE_SEED: &[u8] = b"profile";
+
 pub const COIN_SEED: &[u8] = b"coin";
 pub const COIN_MINT_SEED: &[u8] = b"coin_mint";

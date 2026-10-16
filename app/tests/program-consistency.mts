@@ -301,7 +301,34 @@ async function main() {
   console.log("OK  hand-built CreateMetadataAccountV3 round-trips through Metaplex");
 
   // ---------------------------------------------------------------------
-  // 8. The TS fee caps still match the Rust ones.
+  // 8. set_profile: the hand-built instruction lands and the Profile decoder
+  //    reads back exactly what the program wrote, including the Borsh string.
+  // ---------------------------------------------------------------------
+  const { setProfileTx } = await import("../src/lib/etf/client.js");
+  const { profilePda } = await import("../src/lib/etf/pda.js");
+  const { decodeProfile } = await import("../src/lib/etf/accounts.js");
+
+  const namer = Keypair.generate();
+  svm.airdrop(toAddress(namer.publicKey), lamports(1_000_000_000n));
+  await send(svm, setProfileTx({ owner: namer.publicKey, name: "Frog Enjoyer" }), [namer]);
+
+  const profile = decodeProfile(getAccountData(svm, profilePda(namer.publicKey)[0]));
+  assert.equal(profile.owner.toBase58(), namer.publicKey.toBase58(), "Profile.owner");
+  assert.equal(profile.name, "Frog Enjoyer", "Profile.name round-trips");
+  console.log("OK  set_profile: Profile decodes back exactly as sent");
+
+  // Same PDA, overwritten — proves init_if_needed is reachable twice and that
+  // a shorter name doesn't leave the old one's tail behind.
+  await send(svm, setProfileTx({ owner: namer.publicKey, name: "Bob" }), [namer]);
+  assert.equal(
+    decodeProfile(getAccountData(svm, profilePda(namer.publicKey)[0])).name,
+    "Bob",
+    "Profile.name after update",
+  );
+  console.log("OK  set_profile: updating in place replaces the name cleanly");
+
+  // ---------------------------------------------------------------------
+  // 9. The TS fee caps still match the Rust ones.
   // ---------------------------------------------------------------------
   const caps = await import("../src/lib/etf/constants.js");
   const { MAX_MINT_FEE_BPS, MAX_REDEEM_FEE_BPS, MAX_STREAMING_FEE_BPS, MAX_PROTOCOL_SHARE_BPS } = caps;

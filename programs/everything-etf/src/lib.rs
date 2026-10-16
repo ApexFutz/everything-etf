@@ -49,6 +49,13 @@ pub mod everything_etf {
         instructions::update_authority::handler(ctx)
     }
 
+    /// Set or change the caller's display name. Permissionless and
+    /// self-scoped: the account is a PDA seeded by the signer, so a wallet can
+    /// only ever name itself.
+    pub fn set_profile(ctx: Context<SetProfile>, name: String) -> Result<()> {
+        instructions::set_profile::handler(ctx, name)
+    }
+
     /// Mint $EETF: whole fixed supply at once, then the mint authority is
     /// revoked in the same instruction. Callable exactly once.
     pub fn initialize_coin(

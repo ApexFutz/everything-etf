@@ -60,4 +60,13 @@ pub enum EtfError {
     // match on the old numbers.
     #[msg("New authority is the same as the current one")]
     AuthorityUnchanged,
+
+    #[msg("Display name must not be blank.")]
+    ProfileNameEmpty,
+
+    #[msg("Display name is longer than the 32-byte limit.")]
+    ProfileNameTooLong,
+
+    #[msg("Display name contains control characters.")]
+    ProfileNameNotPrintable,
 }

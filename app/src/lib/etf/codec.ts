@@ -128,6 +128,15 @@ export class Reader {
     return v;
   }
 
+  /** Borsh string: u32 byte-length prefix, then UTF-8. */
+  string(): string {
+    const len = this.data.readUInt32LE(this.offset);
+    this.offset += 4;
+    const v = this.data.subarray(this.offset, this.offset + len).toString("utf-8");
+    this.offset += len;
+    return v;
+  }
+
   vecPubkey(): PublicKey[] {
     const len = this.data.readUInt32LE(this.offset);
     this.offset += 4;

@@ -140,6 +140,22 @@ export function updateAuthority(args: {
 }
 
 // ---------------------------------------------------------------------------
+// set_profile
+// ---------------------------------------------------------------------------
+
+export function setProfile(args: {
+  owner: PublicKey;
+  profile: PublicKey;
+  name: string;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [signerW(args.owner), w(args.profile), r(SystemProgram.programId)],
+    data: new Writer().bytes(DISC.set_profile).string(args.name).finish(),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // initialize_coin / update_coin_terms
 // ---------------------------------------------------------------------------
 

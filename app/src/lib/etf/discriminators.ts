@@ -17,6 +17,7 @@ export const INSTRUCTION_DISCRIMINATORS = {
   update_authority: [32, 46, 64, 28, 149, 75, 243, 88],
   initialize_coin: [157, 22, 183, 45, 31, 253, 33, 186],
   update_coin_terms: [86, 39, 64, 13, 55, 234, 184, 58],
+  set_profile: [221, 221, 195, 121, 133, 71, 113, 170],
   crank_burn: [51, 203, 144, 198, 171, 213, 49, 54],
   create_basket: [47, 105, 155, 148, 15, 169, 202, 211],
   seed_basket: [149, 209, 187, 119, 255, 86, 66, 172],
@@ -28,6 +29,7 @@ export const INSTRUCTION_DISCRIMINATORS = {
 } as const;
 
 export const ACCOUNT_DISCRIMINATORS = {
+  Profile: [184, 101, 165, 188, 95, 63, 127, 188],
   Config: [155, 12, 170, 224, 30, 250, 204, 130],
   Basket: [219, 79, 107, 135, 231, 243, 218, 248],
   CoinConfig: [97, 103, 88, 149, 58, 133, 241, 93],

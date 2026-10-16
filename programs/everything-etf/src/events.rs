@@ -150,3 +150,10 @@ pub struct CoinBurned {
     pub total_burned: u64,
     pub timestamp: i64,
 }
+
+#[event]
+pub struct ProfileSet {
+    pub owner: Pubkey,
+    pub name: String,
+    pub timestamp: i64,
+}

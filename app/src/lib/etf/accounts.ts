@@ -74,6 +74,20 @@ export function decodeBasket(data: Buffer): Basket {
   };
 }
 
+export interface Profile {
+  owner: PublicKey;
+  name: string;
+  bump: number;
+}
+
+export function decodeProfile(data: Buffer): Profile {
+  if (!hasDiscriminator(data, [...ACCOUNT_DISCRIMINATORS.Profile])) {
+    throw new Error("not a Profile account (discriminator mismatch)");
+  }
+  const r = new Reader(data.subarray(8));
+  return { owner: r.pubkey(), name: r.string(), bump: r.u8() };
+}
+
 export interface CoinConfig {
   mint: PublicKey;
   devTreasury: PublicKey;

@@ -3,8 +3,8 @@
 //! compiled binary and asserts the exact `EtfError` the program returns.
 
 use everything_etf::constants::{
-    MAX_ASSETS, MAX_CREATION_FEE_COIN, MAX_PROTOCOL_SHARE_BPS, MAX_REDEEM_FEE_BPS, MIN_ASSETS,
-    MIN_CREATION_BURN_BPS,
+    MAX_ASSETS, MAX_CREATION_FEE_COIN, MAX_PROFILE_NAME_LEN, MAX_PROTOCOL_SHARE_BPS,
+    MAX_REDEEM_FEE_BPS, MIN_ASSETS, MIN_CREATION_BURN_BPS,
 };
 use everything_etf::errors::EtfError;
 use everything_etf::state::FeeRecipient;
@@ -586,4 +586,84 @@ fn accrue_fees_twice_in_the_same_instant_mints_nothing_the_second_time() {
     // And a second accrual in the same instant is still a no-op.
     env.accrue_fees(&basket).unwrap();
     assert_eq!(env.mint_supply(basket.mint), supply_after_first);
+}
+
+// ---------------------------------------------------------------------------
+// set_profile
+// ---------------------------------------------------------------------------
+
+#[test]
+fn set_profile_creates_then_updates_in_place() {
+    let mut env = Env::new();
+    let alice = env.alice.insecure_clone();
+
+    env.set_profile(&alice, "Frog Enjoyer").unwrap();
+    let p = env.profile_account(pubkey_of(&alice));
+    assert_eq!(p.owner, pubkey_of(&alice));
+    assert_eq!(p.name, "Frog Enjoyer");
+
+    // Same PDA, overwritten — init_if_needed must not fail the second time.
+    env.set_profile(&alice, "Frog Respecter").unwrap();
+    assert_eq!(env.profile_account(pubkey_of(&alice)).name, "Frog Respecter");
+}
+
+#[test]
+fn set_profile_is_scoped_to_the_signer() {
+    let mut env = Env::new();
+    let alice = env.alice.insecure_clone();
+    let manager = env.manager.insecure_clone();
+
+    env.set_profile(&alice, "Alice").unwrap();
+    env.set_profile(&manager, "Manager").unwrap();
+
+    // Separate PDAs: naming yourself can never touch anyone else's name.
+    assert_eq!(env.profile_account(pubkey_of(&alice)).name, "Alice");
+    assert_eq!(env.profile_account(pubkey_of(&manager)).name, "Manager");
+}
+
+#[test]
+fn set_profile_trims_surrounding_whitespace() {
+    let mut env = Env::new();
+    let alice = env.alice.insecure_clone();
+    env.set_profile(&alice, "   Padded   ").unwrap();
+    assert_eq!(env.profile_account(pubkey_of(&alice)).name, "Padded");
+}
+
+#[test]
+fn set_profile_rejects_a_blank_name() {
+    let mut env = Env::new();
+    let alice = env.alice.insecure_clone();
+    for blank in ["", "   ", "\t"] {
+        let res = env.set_profile(&alice, blank);
+        assert_etf_error(res, EtfError::ProfileNameEmpty);
+    }
+}
+
+#[test]
+fn set_profile_rejects_a_name_over_the_byte_limit() {
+    let mut env = Env::new();
+    let alice = env.alice.insecure_clone();
+
+    // Exactly at the cap is fine.
+    let ok = "a".repeat(MAX_PROFILE_NAME_LEN);
+    env.set_profile(&alice, &ok).unwrap();
+    assert_eq!(env.profile_account(pubkey_of(&alice)).name, ok);
+
+    let res = env.set_profile(&alice, &"a".repeat(MAX_PROFILE_NAME_LEN + 1));
+    assert_etf_error(res, EtfError::ProfileNameTooLong);
+
+    // The cap is bytes, not characters: 32 multi-byte glyphs wouldn't fit the
+    // space the account was allocated.
+    let res = env.set_profile(&alice, &"é".repeat(MAX_PROFILE_NAME_LEN));
+    assert_etf_error(res, EtfError::ProfileNameTooLong);
+}
+
+#[test]
+fn set_profile_rejects_control_characters() {
+    let mut env = Env::new();
+    let alice = env.alice.insecure_clone();
+    for bad in ["two\nlines", "bell\u{7}", "zero\u{0}width"] {
+        let res = env.set_profile(&alice, bad);
+        assert_etf_error(res, EtfError::ProfileNameNotPrintable);
+    }
 }

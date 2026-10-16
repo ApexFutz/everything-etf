@@ -23,6 +23,8 @@ export const MAX_REDEEM_FEE_BPS = 0;
 export const MAX_STREAMING_FEE_BPS = 0;
 export const MAX_PROTOCOL_SHARE_BPS = 3_000; // 30%
 
+export const MAX_PROFILE_NAME_LEN = 32;
+
 export const BASKET_DECIMALS = 9;
 export const COIN_DECIMALS = 9;
 
@@ -39,6 +41,7 @@ export const MAX_URI_LEN = 200;
 export const CONFIG_SEED = Buffer.from("config");
 export const BASKET_SEED = Buffer.from("basket");
 export const BASKET_MINT_SEED = Buffer.from("basket_mint");
+export const PROFILE_SEED = Buffer.from("profile");
 export const COIN_SEED = Buffer.from("coin");
 export const COIN_MINT_SEED = Buffer.from("coin_mint");
 

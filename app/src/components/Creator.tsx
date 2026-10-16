@@ -16,13 +16,22 @@ export function Creator({
   address,
   size = "sm",
   showAddress = true,
+  chosenName,
 }: {
   address: PublicKey | string;
   size?: "sm" | "md";
   showAddress?: boolean;
+  /**
+   * The name this wallet set on chain, if it set one. Falls back to the
+   * derived name, so a wallet that has never named itself still reads as
+   * somebody rather than as an address.
+   */
+  chosenName?: string | null;
 }) {
   const key = typeof address === "string" ? address : address.toBase58();
-  const { name, initials, hue } = identityFor(key);
+  const derived = identityFor(key);
+  const { initials, hue } = derived;
+  const name = chosenName?.trim() || derived.name;
   const dim = size === "md" ? "h-7 w-7 text-[11px]" : "h-5 w-5 text-[9px]";
 
   return (
