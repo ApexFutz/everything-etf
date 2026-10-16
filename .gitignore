@@ -5,3 +5,9 @@ target
 node_modules
 test-ledger
 .yarn
+
+# Local, machine-specific toolchain wiring
+.cargo/config.toml
+
+# Deploy/admin keypairs — private keys, never commit these
+keys/
