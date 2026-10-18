@@ -85,6 +85,12 @@ $EETF has no market until it trades, so before launch there is no price to read 
 
 ## Known simplifications (demo-grade, not production-grade)
 
+- **The program's upgrade authority and `Config.authority` are the same key.**
+  That key can both operate the protocol and replace the program underneath it,
+  so one compromise is total. The two treasuries are already on their own keys;
+  see "Admin roles" in the root README for the command that splits the last
+  pair, and why a multisig and a timelock are still needed after it.
+
 - **One keypair plays every admin role** in the initialize script (upgrade authority,
   protocol treasury, $EETF genesis owner, dev treasury) — fine for trying things out,
   not how you'd actually want a real deployment split.
