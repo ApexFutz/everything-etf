@@ -20,6 +20,10 @@ import { quoteMintDeposits, quoteRedeemPayouts } from "@/lib/etf/quote";
 import { BasketNav, computeNav } from "@/lib/etf/nav";
 import { resolveForPricing } from "@/lib/etf/demo";
 import { Creator } from "@/components/Creator";
+import { ZapTrade } from "@/components/ZapTrade";
+import { fetchUsdPrice, WRAPPED_SOL_MINT } from "@/lib/etf/pricing";
+import { fetchMetadataFor } from "@/lib/etf/metadata";
+import { getStandIn } from "@/lib/etf/demo";
 import { FeeRecipient } from "@/lib/etf/instructions";
 import { Config } from "@/lib/etf/accounts";
 import { BASKET_DECIMALS } from "@/lib/etf/constants";
@@ -45,6 +49,9 @@ export default function BasketPage() {
   const [assetDecimals, setAssetDecimals] = useState<number[]>([]);
   const [nav, setNav] = useState<BasketNav | null>(null);
   const [managerName, setManagerName] = useState<string | null>(null);
+  const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
+  /** Symbols for the basket's assets, for labelling the swap steps. */
+  const [assetSymbols, setAssetSymbols] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -106,8 +113,19 @@ export default function BasketPage() {
     let cancelled = false;
     (async () => {
       if (!basket) return;
-      const p = await fetchProfile(connection, basket.manager);
-      if (!cancelled) setManagerName(p?.name ?? null);
+      const [p, sol, meta] = await Promise.all([
+        fetchProfile(connection, basket.manager),
+        fetchUsdPrice(WRAPPED_SOL_MINT),
+        fetchMetadataFor(connection, basket.assets),
+      ]);
+      if (cancelled) return;
+      setManagerName(p?.name ?? null);
+      setSolPriceUsd(sol);
+      setAssetSymbols(
+        basket.assets.map(
+          (a, i) => meta[i]?.symbol || getStandIn(a)?.symbol || a.toBase58().slice(0, 4),
+        ),
+      );
     })();
     return () => {
       cancelled = true;
@@ -291,6 +309,14 @@ export default function BasketPage() {
 
       {isSeeded && (
         <>
+          <ZapTrade
+            basket={basket}
+            nav={nav}
+            solPriceUsd={solPriceUsd}
+            supply={supply}
+            symbols={assetSymbols}
+            onDone={refresh}
+          />
           <MintRedeemForm
             kind="mint"
             basket={basket}

@@ -26,7 +26,7 @@ import {
   Transaction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { JupiterQuote, ZapPlan } from "./zap";
+import { JupiterQuote, ZapLeg, ZapPlan } from "./zap";
 
 export const JUPITER_SWAP_URL = "https://lite-api.jup.ag/swap/v1/swap";
 
@@ -168,4 +168,110 @@ export async function sendZapLaunch(
     }
   }
   return { signatures };
+}
+
+/**
+ * Buying an existing basket with one asset: swap into each underlying at the
+ * basket's *current* ratios, then mint.
+ *
+ * Same ExactOut reasoning as the launch flow — the mint needs exact deposits,
+ * so fixing each swap's output makes the mint transaction constructible before
+ * any swap has landed, and the whole thing becomes one signature.
+ *
+ * Swaps run before the mint so a failure partway leaves the buyer holding
+ * tokens rather than a half-finished position.
+ */
+export async function buildZapBuy(args: {
+  connection: Connection;
+  user: PublicKey;
+  plan: ZapPlan;
+  symbols: string[];
+  mintIxs: Transaction;
+  signal?: AbortSignal;
+}): Promise<ZapStep[]> {
+  const { connection, user, plan, symbols, mintIxs } = args;
+
+  if (plan.unroutable.length > 0) {
+    throw new Error(
+      `No swap route for ${plan.unroutable.length} of this basket's tokens. ` +
+        `You can still mint by depositing them yourself.`,
+    );
+  }
+
+  const swaps = await Promise.all(
+    plan.legs.map(async (leg, i): Promise<ZapStep | null> =>
+      leg.quote
+        ? {
+            kind: "swap",
+            label: `Buy ${symbols[i] ?? "token"}`,
+            transaction: await fetchSwapTransaction(leg.quote, user, args.signal),
+          }
+        : null,
+    ),
+  );
+
+  const { blockhash } = await connection.getLatestBlockhash("finalized");
+  mintIxs.recentBlockhash = blockhash;
+  mintIxs.feePayer = user;
+
+  return [
+    ...swaps.filter((s): s is ZapStep => s !== null),
+    { kind: "create", label: "Mint basket tokens", transaction: mintIxs },
+  ];
+}
+
+/**
+ * Selling: redeem for the underlying, then swap each one back out.
+ *
+ * The redeem has to go first, because the swaps spend what it pays out — which
+ * is the awkward part. Those swaps are quoted ExactIn against the *expected*
+ * payout, and the real payout can come in slightly lower if supply moved
+ * between quoting and landing. A swap asking for more than the wallet holds
+ * fails outright, so each leg is quoted against a haircut of the expectation
+ * and the remainder is simply left in the wallet. Dust is a much better
+ * outcome than a stalled sale with the basket already burned.
+ */
+export const SELL_HAIRCUT_BPS = 50; // 0.5%
+
+export function haircut(amount: bigint): bigint {
+  return (amount * BigInt(10_000 - SELL_HAIRCUT_BPS)) / 10_000n;
+}
+
+export async function buildZapSell(args: {
+  connection: Connection;
+  user: PublicKey;
+  redeemIxs: Transaction;
+  plan: { legs: ZapLeg[]; unroutable: PublicKey[] };
+  symbols: string[];
+  signal?: AbortSignal;
+}): Promise<ZapStep[]> {
+  const { connection, user, redeemIxs, plan, symbols } = args;
+
+  if (plan.unroutable.length > 0) {
+    throw new Error(
+      `No swap route back out of ${plan.unroutable.length} of this basket's tokens. ` +
+        `You can still redeem and keep the underlying.`,
+    );
+  }
+
+  const { blockhash } = await connection.getLatestBlockhash("finalized");
+  redeemIxs.recentBlockhash = blockhash;
+  redeemIxs.feePayer = user;
+
+  const swaps = await Promise.all(
+    plan.legs.map(async (leg, i): Promise<ZapStep | null> =>
+      leg.quote
+        ? {
+            kind: "swap",
+            label: `Sell ${symbols[i] ?? "token"}`,
+            transaction: await fetchSwapTransaction(leg.quote, user, args.signal),
+          }
+        : null,
+    ),
+  );
+
+  return [
+    { kind: "seed", label: "Redeem for the underlying", transaction: redeemIxs },
+    ...swaps.filter((s): s is ZapStep => s !== null),
+  ];
 }

@@ -240,6 +240,45 @@ zero, any non-zero value is an increase and is rejected.
 > change every rule above. Before mainnet, put it behind a multisig and timelock, or freeze
 > the program after audit, and show who holds it on every basket page.
 
+### Admin roles
+
+Four distinct powers, which should not share a key:
+
+| Role | What it can do | Devnet today |
+|---|---|---|
+| Program upgrade authority | Rewrite every rule in this document | `9YKU84a5…` |
+| `Config.authority` | Change terms for future baskets, claim protocol fees, rotate itself | `9YKU84a5…` |
+| `Config.treasury` | Receives SOL launch fees | `7DDdySxh…` |
+| `CoinConfig.dev_treasury` | Receives the un-burned share of $EETF launch fees | `B8AHAB11…` |
+
+The two treasuries are already separate (`split-admin-roles-devnet.mts`). The
+first two still share one key, which is the gap worth closing: that key can both
+operate the protocol *and* replace the program underneath it, so a single
+compromise is total.
+
+Separating them is one command, and the receiving key already exists and is
+funded:
+
+```bash
+solana program set-upgrade-authority <program-id> \
+  --upgrade-authority keys/devnet-admin.json \
+  --new-upgrade-authority <upgrade-authority pubkey> \
+  --url devnet
+```
+
+After that, `scripts/deploy-devnet.sh` needs `--deployer` pointed at the
+upgrade-authority key rather than the admin key — deploying is the one thing
+the admin key will no longer be able to do, which is the point.
+
+Two further steps remain, and neither is a key move:
+
+- **Multisig.** A single separate key is separation of duties, not shared
+  custody. Real protection means the upgrade authority being a Squads multisig,
+  so no one person can upgrade alone.
+- **Timelock.** Nothing in the program delays an upgrade, so even a multisig can
+  change the rules with no warning to anyone holding a basket. A timelock is a
+  program change, not a configuration one.
+
 ## Asset safety rules
 
 `create_basket` rejects asset mints that could trap or drain the vault:
