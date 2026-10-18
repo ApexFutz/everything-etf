@@ -342,6 +342,26 @@ async function main() {
   }
   console.log("OK  TS fee caps match constants.rs");
 
+  // ---------------------------------------------------------------------
+  // 10. The TS error list matches EtfError, in order.
+  //
+  // Anchor derives codes positionally (6000 + index), so a variant inserted
+  // rather than appended silently renumbers everything after it, and a
+  // missing one makes the UI print a raw code instead of a message. Both are
+  // invisible until a user hits the error, which is the worst time to find out.
+  // ---------------------------------------------------------------------
+  const ERRORS_RS = path.join(here, "..", "..", "programs", "everything-etf", "src", "errors.rs");
+  const rustVariants = [...readFileSync(ERRORS_RS, "utf-8").matchAll(/^    ([A-Z][A-Za-z]*),$/gm)].map(
+    (m) => m[1],
+  );
+  const { ERROR_NAMES } = await import("../src/lib/etf/errors.js");
+  assert.deepEqual(
+    ERROR_NAMES,
+    rustVariants,
+    "the TS error list drifted from EtfError — order matters, codes are 6000 + index",
+  );
+  console.log(`OK  TS error list matches EtfError (${rustVariants.length} variants, in order)`);
+
   console.log("\nAll program-consistency checks passed.");
 }
 
