@@ -149,23 +149,23 @@ export default function Home() {
 
         {/* --------------------------------------------------------- fee model */}
         <Section
-          title="Fees, and the caps on them"
-          lead="Managers set their own fees but can never exceed limits hardcoded in the program. They can lower them instantly; raising them above a cap is impossible, not merely discouraged."
+          title="Fees"
+          lead="A basket charges nothing, and nobody can change that. All three caps are zero and compiled into the program rather than stored as settings, so there is no authority — creator or protocol — that could introduce a fee on a basket you already hold."
         >
           <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full min-w-[32rem] text-sm">
               <thead className="bg-surface-2 text-left text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">Fee</th>
-                  <th className="px-4 py-2.5 font-medium">Set by</th>
+                  <th className="px-4 py-2.5 font-medium">Who sets it</th>
                   <th className="px-4 py-2.5 font-medium">Hard cap</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-surface">
                 {[
-                  ["Mint a basket token", "Nobody — free", formatBps(MAX_MINT_FEE_BPS)],
-                  ["Redeem", "Nobody — free", formatBps(MAX_REDEEM_FEE_BPS)],
-                  ["Hold (annual)", "Nobody — free", formatBps(MAX_STREAMING_FEE_BPS)],
+                  ["Mint a basket token", "Nobody — it is free", formatBps(MAX_MINT_FEE_BPS)],
+                  ["Redeem", "Nobody — it is free", formatBps(MAX_REDEEM_FEE_BPS)],
+                  ["Hold (annual)", "Nobody — it is free", formatBps(MAX_STREAMING_FEE_BPS)],
                   ["Launch a basket", "The creator, once", "$EETF + SOL"],
                 ].map(([fee, who, cap]) => (
                   <tr key={fee}>

@@ -1,6 +1,6 @@
 # Everything ETF
 
-A launchpad for **equal-weight, on-chain basket tokens** on Solana. Anyone can create
+A launchpad for **on-chain basket tokens** on Solana. Anyone can create
 a basket (e.g. a "Frog" basket of frog-themed memecoins), and the basket token can be
 bought anywhere Solana tokens trade, including the pump.fun and fomo UIs. A bridged
 copy is planned for Robinhood Chain, where it will trade on Ramses.
@@ -96,8 +96,10 @@ ever move those coins again is `crank_burn`, which burns the entire balance and
 is **permissionless** — anyone can call it, and the only possible outcome is a
 smaller supply. Nothing in the program can withdraw from it.
 
-That is the hook for protocol revenue: the 10% protocol share of basket fees
-arrives as basket tokens and underlyings, and once step 2 routes payouts
+That is the hook for protocol revenue. Note that basket fees are currently
+zero, so the protocol's share of them is zero too — the SOL launch fee is the
+only revenue today. If fees ever return, that share arrives as basket tokens
+and underlyings, and once step 2 routes payouts
 through Jupiter, the treasury can swap that revenue to $EETF, send it to the
 burn vault, and let anyone crank it. Until then the vault is live but only
 holds what people voluntarily send it. **The swap-and-send step is off-chain
@@ -164,8 +166,12 @@ for how to resolve that, and `--help` for all flags. It stops after the binary i
 
 ## How a basket works
 
-1. A **manager** creates a basket from 2 to 10 existing SPL / Token-2022 coins.
-   Each coin is meant to be **1/N** of the basket.
+1. A **manager** creates a basket from 2 to 10 existing SPL / Token-2022 coins
+   and chooses each one's share. Equal weight is the default the launch form
+   offers, not a rule the program enforces — `seed_basket` takes whatever
+   amounts it is handed, and whatever ratio the first deposit lands in *is* the
+   basket. Nothing rebalances afterwards, so those weights drift with price: a
+   basket seeded 25/25/25/25 reads 40/20/20/20 once one coin doubles.
 2. The manager **seeds** it with the first deposit and receives the first basket tokens.
 3. Anyone can **mint** basket tokens by depositing each underlying pro-rata (at NAV),
    or **redeem** them for their share of every underlying.
@@ -175,44 +181,51 @@ for how to resolve that, and `--help` for all flags. It stops after the binary i
 
 ## Fee model
 
+**A basket charges nothing.** The one-time launch fee is the only fee in the
+protocol.
+
 | Item | Value |
 |---|---|
-| Creation fee | `creation_fee_coin` in $EETF, targeting ~$15 — burned / dev split, see above |
-| SOL creation fee | `creation_fee_lamports`, 0.1 SOL by default |
-| Mint fee | set per basket, hard cap **0.25%** |
-| Redeem fee | **always zero** — `MAX_REDEEM_FEE_BPS` is 0 |
-| Streaming (management) fee | set per basket, hard cap **0.5% / year** |
-| Protocol share of all fees | 10% (locked onto each basket at creation, hard cap 30%) |
-| Payout split for every recipient | **75% cash leg / 25% basket tokens** |
+| $EETF launch fee | `creation_fee_coin`, targeting ~$15 — burned / dev split, see above |
+| SOL launch fee | `creation_fee_lamports`, 0.1 SOL by default |
+| Mint fee | **0** — `MAX_MINT_FEE_BPS` is 0 |
+| Redeem fee | **0** — `MAX_REDEEM_FEE_BPS` is 0 |
+| Streaming (management) fee | **0** — `MAX_STREAMING_FEE_BPS` is 0 |
+| Protocol share of basket fees | moot while the caps are zero (hard cap 30%) |
+| Payout split, if fees ever return | 75% cash leg / 25% basket tokens |
 
-Example, 1 SOL of fees: protocol gets 0.075 cash + 0.025 in basket tokens;
-manager gets 0.675 cash + 0.225 in basket tokens.
+All three caps are compiled into the program rather than stored as settings, so
+there is no authority — creator or protocol — that can introduce a fee on a
+basket that already exists.
 
-### Why those caps
+### Why zero rather than low
 
-They sit below the comparable market deliberately. Index Coop's DPI charges
-0.95%/yr streaming with **0% mint and 0% redeem**; MVI charges 1.5%/yr on the
-same zero/zero basis; Symmetry, the closest Solana basket product, currently
-runs with management and performance fees disabled entirely.
+The market the caps were originally set against charges something: Index Coop's
+DPI charges 0.95%/yr streaming with **0% mint and 0% redeem**; MVI charges
+1.5%/yr on the same zero/zero basis; Symmetry runs with management and
+performance fees disabled entirely. Charging less than that was the first
+decision; charging nothing was the second.
 
-Mint and redeem are not ordinary revenue lines — they are the arbitrage path
+Mint and redeem were never ordinary revenue lines — they are the arbitrage path
 that keeps a basket trading at NAV. Every basis point charged there widens the
-band the price can drift inside before correcting it becomes profitable, so a
-0.5%-in / 0.5%-out schedule hands holders a 1% no-arbitrage band. That is why
-redeeming here is free and can't be switched on, minting is capped at a quarter
-percent, and the streaming fee — which doesn't touch the peg — carries the
-economics.
+band the price can drift inside before correcting it becomes profitable, and
+holders pay for that band as tracking error. At zero there is no band.
 
-For the SOL leg: pump.fun charges 0.02 SOL platform plus ~0.012 SOL of rent.
-0.1 SOL is above that, which is intended — a basket allocates a mint, metadata,
-a fee escrow and one vault per asset, and launching one is a fund launch rather
-than a naked token mint. The $EETF burn is what does the spam filtering, so the
-SOL leg only has to cover treasury liquidity.
+That leaves a creator earning the way every other holder does: they hold 100%
+of the starting supply, so their return is the basket appreciating. There is no
+fee stream to harvest, and nothing being steadily sold into the market.
 
-Fees accrue in basket-token units in a fee escrow owned by the basket PDA. On
-`claim_fees`, 25% is transferred as basket tokens and 75% is burned and paid out of the vault.
-In **v0.1 the cash leg is paid in-kind** (pro-rata underlyings). **Step 2** adds a
-Jupiter swap inside `claim_fees` so it arrives as SOL.
+For the SOL leg: pump.fun charges 0.02 SOL platform plus ~0.012 SOL of rent, and
+the market has since moved toward free creation monetised by trading fees — which
+is exactly the lever this protocol has given up. 0.1 SOL is above pump.fun's and
+intended to be: a basket allocates a mint, metadata, a fee escrow and one vault
+per asset, and launching one is a fund launch rather than a naked token mint.
+Account rent is about 0.015 SOL of that and is refundable, not revenue.
+
+The fee plumbing (`fee_escrow`, `accrue_fees`, `claim_fees`, `lower_fees`,
+`protocol_share_bps`) is left in place but unreachable: nothing accrues and
+there is never anything to claim. Future revenue is intended to come from
+mechanics beside the basket rather than from taxing it.
 
 ### The only ways value leaves a vault
 
@@ -220,8 +233,8 @@ Jupiter swap inside `claim_fees` so it arrives as SOL.
 2. `claim_fees`: amount fixed by on-chain ledgers, paid only to the manager or the protocol treasury.
 3. *(step 6)* rebalance swaps, bounded by oracle prices.
 
-Managers can **lower** fees instantly but can never raise them above the hard caps.
-Raising fees (within caps) will go through a timelock in step 6.
+`lower_fees` still exists but can only ever restate zero: with every cap at
+zero, any non-zero value is an increase and is rejected.
 
 > **Upgrade authority is the master key.** Whoever holds the program's upgrade authority can
 > change every rule above. Before mainnet, put it behind a multisig and timelock, or freeze
