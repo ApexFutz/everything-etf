@@ -2,6 +2,10 @@
  * `EtfError` mirrored from programs/everything-etf/src/errors.rs. Variant
  * order matters: Anchor's error code is `6000 + <variant index>`.
  */
+/** Variant names in declaration order — the consistency test compares this
+ *  against errors.rs, since Anchor codes are 6000 + index. */
+export const ERROR_NAMES: string[] = [];
+
 const VARIANTS = [
   ["InvalidAssetCount", "A basket needs between 2 and 10 assets"],
   ["DuplicateAsset", "The same asset was listed twice"],
@@ -30,7 +34,12 @@ const VARIANTS = [
   ["MintAuthorityNotRevoked", "Coin mint authority was not revoked"],
   ["MathOverflow", "Arithmetic overflow"],
   ["AuthorityUnchanged", "New authority is the same as the current one"],
+  ["ProfileNameEmpty", "Display name must not be blank"],
+  ["ProfileNameTooLong", "Display name is longer than the 32-byte limit"],
+  ["ProfileNameNotPrintable", "Display name contains control characters"],
 ] as const;
+
+ERROR_NAMES.push(...VARIANTS.map(([name]) => name));
 
 const ERROR_CODE_OFFSET = 6000;
 
