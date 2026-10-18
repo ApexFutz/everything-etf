@@ -157,7 +157,11 @@ export default function BasketsPage() {
               <h2 className="mb-3 text-sm font-semibold text-muted">Protocol</h2>
               <div className="grid grid-cols-2 gap-4">
                 <Stat label="Baskets created" value={config.basketCount.toString()} />
-                <Stat label="Protocol fee share" value={formatBps(config.protocolShareBps)} />
+                {/* The protocol's share of basket fees is not shown: every fee
+                    cap is zero, so a share of them is a share of nothing, and
+                    printing "10%" beside a launch cost reads as a cut the
+                    protocol takes on trades. It does not take one. */}
+                <Stat label="Basket fees" value="None" sub="mint, hold and redeem are free" />
                 <Stat
                   label="SOL creation fee"
                   value={formatTokens(config.creationFeeLamports, 9)}

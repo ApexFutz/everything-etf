@@ -133,6 +133,7 @@ export default function BasketPage() {
   const isManager = publicKey?.equals(basket.manager) ?? false;
   const isProtocolAuthority = (config && publicKey?.equals(config.authority)) ?? false;
   const isSeeded = supply > 0n;
+  const accruedFees = basket.managerFeesAccrued + basket.protocolFeesAccrued;
 
   async function after(sig: string | null) {
     if (sig) await refresh();
@@ -155,16 +156,27 @@ export default function BasketPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="Supply" value={formatTokens(supply, BASKET_DECIMALS, 4)} />
           <Stat label="Fees" value="None" sub="mint, redeem and holding are all free" />
-          <Stat
-            label="Manager fees accrued"
-            value={formatTokens(basket.managerFeesAccrued, BASKET_DECIMALS, 4)}
-          />
-          <Stat
-            label="Protocol fees accrued"
-            value={formatTokens(basket.protocolFeesAccrued, BASKET_DECIMALS, 4)}
-          />
-          <Stat label="Protocol share" value={formatBps(basket.protocolShareBps)} />
           <Stat label="Assets" value={basket.assets.length} />
+          {/* Accrued fees and the protocol's share of them are shown only when
+              there is something to show. Every fee cap is zero, so for any
+              basket created now these are permanently 0 and a "10% protocol
+              share" beside them reads as a cut that is never taken. Baskets
+              created before the caps went to zero still carry real balances,
+              and hiding those would be hiding someone's money. */}
+          {accruedFees > 0n && (
+            <>
+              <Stat
+                label="Manager fees accrued"
+                value={formatTokens(basket.managerFeesAccrued, BASKET_DECIMALS, 4)}
+                sub="from before fees were removed"
+              />
+              <Stat
+                label="Protocol fees accrued"
+                value={formatTokens(basket.protocolFeesAccrued, BASKET_DECIMALS, 4)}
+              />
+              <Stat label="Protocol share" value={formatBps(basket.protocolShareBps)} />
+            </>
+          )}
         </div>
         <div className="mt-4">
           <div className="mb-2 flex items-baseline justify-between text-sm">
