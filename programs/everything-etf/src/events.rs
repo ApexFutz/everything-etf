@@ -20,6 +20,13 @@ pub struct ProtocolTermsUpdated {
 }
 
 #[event]
+pub struct AuthorityUpdated {
+    pub previous: Pubkey,
+    pub new_authority: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
 pub struct BasketCreated {
     pub basket: Pubkey,
     pub id: u64,
@@ -141,5 +148,12 @@ pub struct CoinBurned {
     pub amount: u64,
     pub supply_after: u64,
     pub total_burned: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct ProfileSet {
+    pub owner: Pubkey,
+    pub name: String,
     pub timestamp: i64,
 }

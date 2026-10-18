@@ -1,10 +1,11 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Burn, Mint, Token, TokenAccount};
+use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::constants::COIN_SEED;
 use crate::errors::EtfError;
 use crate::events::CoinBurned;
 use crate::state::CoinConfig;
+use crate::utils::burn_coin;
 
 /// Burns the entire burn-vault balance. Permissionless: anyone can crank it,
 /// and the only possible outcome is a smaller supply.
@@ -32,33 +33,27 @@ pub fn handler(ctx: Context<CrankBurn>) -> Result<()> {
     let amount = ctx.accounts.burn_vault.amount;
     require!(amount > 0, EtfError::NothingToBurn);
 
+    // The vault is owned by the coin PDA, so the PDA signs for its own burn.
     let bump = [ctx.accounts.coin_config.bump];
     let seeds: &[&[u8]] = &[COIN_SEED, &bump];
-    token::burn(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            Burn {
-                mint: ctx.accounts.coin_mint.to_account_info(),
-                from: ctx.accounts.burn_vault.to_account_info(),
-                authority: ctx.accounts.coin_config.to_account_info(),
-            },
-            &[seeds],
-        ),
+    let authority = ctx.accounts.coin_config.to_account_info();
+    let from = ctx.accounts.burn_vault.to_account_info();
+    let token_program = ctx.accounts.token_program.to_account_info();
+    let total_burned = burn_coin(
+        &mut ctx.accounts.coin_config,
+        &mut ctx.accounts.coin_mint,
+        &from,
+        &authority,
+        &token_program,
         amount,
+        &[seeds],
     )?;
-    ctx.accounts.coin_mint.reload()?;
-
-    let coin_config = &mut ctx.accounts.coin_config;
-    coin_config.total_burned = coin_config
-        .total_burned
-        .checked_add(amount)
-        .ok_or(EtfError::MathOverflow)?;
 
     emit!(CoinBurned {
         cranker: ctx.accounts.cranker.key(),
         amount,
         supply_after: ctx.accounts.coin_mint.supply,
-        total_burned: coin_config.total_burned,
+        total_burned,
         timestamp: Clock::get()?.unix_timestamp,
     });
     Ok(())
