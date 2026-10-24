@@ -173,7 +173,7 @@ export default function BasketsPage() {
               <h2 className="mb-3 text-sm font-semibold text-muted">Cost to launch</h2>
               <div className="grid grid-cols-2 gap-4">
                 <Stat
-                  label="$EETF fee"
+                  label="$TOTE fee"
                   value={formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)}
                 />
                 <Stat

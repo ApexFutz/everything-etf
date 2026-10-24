@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds and deploys (or upgrades) the Everything ETF program on devnet.
+# Builds and deploys (or upgrades) the Tote program on devnet.
 #
 # Usage:
 #   scripts/deploy-devnet.sh [--deployer <keypair.json>] [--skip-build] [--yes]
@@ -166,7 +166,7 @@ cat <<EOF
 Next steps (not done by this script — they're one-time admin calls, not a
 build/deploy concern):
   1. initialize_config  (sets protocol treasury, creation fee, protocol share)
-  2. initialize_coin    (mints the fixed \$EETF supply, revokes mint authority)
+  2. initialize_coin    (mints the fixed \$TOTE supply, revokes mint authority)
 
 create_basket reads the coin config, so no basket can exist before step 2.
 See the "Deployment order" section of README.md.

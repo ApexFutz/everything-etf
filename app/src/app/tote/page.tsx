@@ -11,7 +11,7 @@ import { explorerTxUrl, formatBps, formatTokens } from "@/lib/format";
 import { AddressLink, Banner, Button, Card, Pill, Stat } from "@/components/ui";
 import { useSendTx } from "@/hooks/useSendTx";
 
-export default function EetfPage() {
+export default function TotePage() {
   const { connection } = useConnection();
   const { publicKey } = useWallet();
   const { send, pending, error, signature } = useSendTx();
@@ -58,7 +58,7 @@ export default function EetfPage() {
     <div className="mx-auto max-w-4xl space-y-8 px-6 py-10">
       <div>
         <Pill tone="accent">Fixed supply · burn only</Pill>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight">$EETF</h1>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight">$TOTE</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
           One coin for the whole launchpad, minted once and never again. Everything on this page is
           read straight off the program&apos;s own accounts, so circulating supply and lifetime burn
@@ -71,7 +71,7 @@ export default function EetfPage() {
 
       {!loading && !coin && (
         <Banner kind="info">
-          $EETF hasn&apos;t been initialized on this cluster yet — no <code>CoinConfig</code> account
+          $TOTE hasn&apos;t been initialized on this cluster yet — no <code>CoinConfig</code> account
           at the expected address.
         </Banner>
       )}
@@ -131,14 +131,14 @@ export default function EetfPage() {
                 <Stat
                   label="Creation fee"
                   value={`${formatTokens(coin.creationFeeCoin, COIN_DECIMALS)}`}
-                  sub={`EETF, per basket — targets $${CREATION_FEE_USD_TARGET}`}
+                  sub={`TOTE, per basket — targets $${CREATION_FEE_USD_TARGET}`}
                 />
                 <Stat label="Burned" value={formatBps(coin.creationBurnBps)} tone="burn" />
               </div>
               <p className="mt-4 text-sm leading-relaxed text-muted">
                 The burn share can be raised but never pushed below{" "}
                 {formatBps(MIN_CREATION_BURN_BPS)} — that floor is hardcoded, not a setting. The
-                remainder ({formatTokens(coin.totalDevFees, COIN_DECIMALS)} EETF so far) goes to
+                remainder ({formatTokens(coin.totalDevFees, COIN_DECIMALS)} TOTE so far) goes to
                 the dev treasury.
               </p>
             </Card>
@@ -146,7 +146,7 @@ export default function EetfPage() {
             <Card>
               <h2 className="font-semibold">Burn vault</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                A one-way sink owned by the coin PDA. Anyone can send $EETF in; the only instruction
+                A one-way sink owned by the coin PDA. Anyone can send $TOTE in; the only instruction
                 that moves it again destroys it. Cranking is permissionless — the only possible
                 outcome is a smaller supply.
               </p>
@@ -200,11 +200,11 @@ export default function EetfPage() {
           )}
 
           <Card className="border-dashed">
-            <h2 className="font-semibold">What $EETF is not</h2>
+            <h2 className="font-semibold">What $TOTE is not</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted">
               It does <strong>not</strong> entitle holders to any share of protocol fees, is{" "}
               <strong>not</strong> required to hold or trade a basket token, and does{" "}
-              <strong>not</strong> vote on anything. Treasury revenue being swapped into $EETF and
+              <strong>not</strong> vote on anything. Treasury revenue being swapped into $TOTE and
               sent to the burn vault is a stated policy, not something the program enforces.
             </p>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">

@@ -1,4 +1,4 @@
-# Everything ETF
+# Tote
 
 A launchpad for **on-chain basket tokens** on Solana. Anyone can create
 a basket (e.g. a "Frog" basket of frog-themed memecoins), and the basket token can be
@@ -15,7 +15,7 @@ copy is planned for Robinhood Chain, where it will trade on Ramses.
 
 ---
 
-## $EETF — the protocol coin
+## $TOTE — the protocol coin
 
 One coin for the whole launchpad. It has no inflation schedule, no staking
 emissions and no rebase: the **only** supply event after genesis is a burn, and
@@ -25,7 +25,7 @@ the thing that drives burns is people launching baskets.
 
 | | |
 |---|---|
-| Genesis supply | 1,000,000,000 EETF (9 decimals) |
+| Genesis supply | 1,000,000,000 TOTE (9 decimals) |
 | Minted | once, inside `initialize_coin` |
 | Mint authority after that | **None** — revoked in the same transaction, and the instruction re-reads the mint and fails if it isn't |
 | Metadata | created with `is_mutable = false`; name, symbol and URI are frozen forever |
@@ -51,14 +51,14 @@ them. Settle the question before any public distribution, not after.
 
 ### Where the coin is used
 
-**Launching a basket costs $EETF.** `create_basket` takes `creation_fee_coin`
+**Launching a basket costs $TOTE.** `create_basket` takes `creation_fee_coin`
 from the manager and splits it in one transaction:
 
 - `creation_burn_bps` of it is **burned** — gone from supply, permanently
 - the remainder goes to the **dev treasury**, which funds the build
 
 **The fee targets $15 per launch, not a fixed number of coins.** A constant coin
-amount can't hold that target on its own: if $EETF appreciates 10x, launching
+amount can't hold that target on its own: if $TOTE appreciates 10x, launching
 costs 10x in real terms and launches stop — which stops the burn the whole
 supply story rests on — and if it craters, the fee stops filtering anything and
 spam baskets return. So `creation_fee_coin` is treated as a *cached quote* of
@@ -69,11 +69,11 @@ than only to whoever runs the script.
 
 What the target implies, at a 1,000,000,000 genesis supply:
 
-| $EETF fully-diluted valuation | Price / coin | $15 launch fee |
+| $TOTE fully-diluted valuation | Price / coin | $15 launch fee |
 |---|---|---|
-| $50,000 | $0.00005 | 300,000 EETF |
-| $500,000 | $0.0005 | 30,000 EETF |
-| $5,000,000 | $0.005 | 3,000 EETF |
+| $50,000 | $0.00005 | 300,000 TOTE |
+| $500,000 | $0.0005 | 30,000 TOTE |
+| $5,000,000 | $0.005 | 3,000 TOTE |
 
 The split stays 70% burned / 30% dev. Both knobs move with
 `update_coin_terms`, both are bounded by hardcoded limits the authority cannot
@@ -91,7 +91,7 @@ discretionary step in between.
 ### The burn vault
 
 `CoinConfig.burn_vault` is a token account owned by the coin PDA. Anyone can
-send $EETF into it with an ordinary transfer, and the only instruction that can
+send $TOTE into it with an ordinary transfer, and the only instruction that can
 ever move those coins again is `crank_burn`, which burns the entire balance and
 is **permissionless** — anyone can call it, and the only possible outcome is a
 smaller supply. Nothing in the program can withdraw from it.
@@ -100,7 +100,7 @@ That is the hook for protocol revenue. Note that basket fees are currently
 zero, so the protocol's share of them is zero too — the SOL launch fee is the
 only revenue today. If fees ever return, that share arrives as basket tokens
 and underlyings, and once step 2 routes payouts
-through Jupiter, the treasury can swap that revenue to $EETF, send it to the
+through Jupiter, the treasury can swap that revenue to $TOTE, send it to the
 burn vault, and let anyone crank it. Until then the vault is live but only
 holds what people voluntarily send it. **The swap-and-send step is off-chain
 and discretionary — it is a policy, not a guarantee the program enforces.**
@@ -109,10 +109,10 @@ and discretionary — it is a policy, not a guarantee the program enforces.**
 `baskets_funded`) and every burn emits an event, so circulating supply and
 lifetime burn are both verifiable without trusting a dashboard.
 
-### Adding a new $EETF sink
+### Adding a new $TOTE sink
 
-Basket creation is the first use of $EETF, not the only planned one. Anything
-that burns $EETF **must** go through `utils::burn_coin`, which performs the CPI,
+Basket creation is the first use of $TOTE, not the only planned one. Anything
+that burns $TOTE **must** go through `utils::burn_coin`, which performs the CPI,
 reloads the mint, and increments `total_burned` as one unit. Do not call
 `token::burn` on the coin mint directly.
 
@@ -131,7 +131,7 @@ anything and asserts `total_burned == COIN_TOTAL_SUPPLY - supply`, so it fails
 in both directions — an uncounted coin burn and a wrongly-counted basket-token
 burn. If you add a sink and that test goes red, the sink is wrong, not the test.
 
-One caveat for a sink that **locks or stakes** $EETF rather than burning it:
+One caveat for a sink that **locks or stakes** $TOTE rather than burning it:
 locked float and burned supply compound against a fixed supply, which squeezes
 the tradeable float and drives the price up — and every fee quoted as a fixed
 number of coins then gets more expensive at once. Price such a sink against a
@@ -148,7 +148,7 @@ roadmap items below are written on that assumption.
 
 `initialize_config` → `initialize_coin` → distribute from the genesis wallet →
 baskets. `create_basket` reads the coin config, so no basket can be created
-before the coin exists. Set `creation_fee_lamports` to 0 once the $EETF fee is
+before the coin exists. Set `creation_fee_lamports` to 0 once the $TOTE fee is
 live, unless you want to keep a small SOL charge as a spam deterrent.
 
 ### Deploying to devnet
@@ -186,7 +186,7 @@ protocol.
 
 | Item | Value |
 |---|---|
-| $EETF launch fee | `creation_fee_coin`, targeting ~$15 — burned / dev split, see above |
+| $TOTE launch fee | `creation_fee_coin`, targeting ~$15 — burned / dev split, see above |
 | SOL launch fee | `creation_fee_lamports`, 0.1 SOL by default |
 | Mint fee | **0** — `MAX_MINT_FEE_BPS` is 0 |
 | Redeem fee | **0** — `MAX_REDEEM_FEE_BPS` is 0 |
@@ -249,7 +249,7 @@ Four distinct powers, which should not share a key:
 | Program upgrade authority | Rewrite every rule in this document | `9YKU84a5…` |
 | `Config.authority` | Change terms for future baskets, claim protocol fees, rotate itself | `9YKU84a5…` |
 | `Config.treasury` | Receives SOL launch fees | `7DDdySxh…` |
-| `CoinConfig.dev_treasury` | Receives the un-burned share of $EETF launch fees | `B8AHAB11…` |
+| `CoinConfig.dev_treasury` | Receives the un-burned share of $TOTE launch fees | `B8AHAB11…` |
 
 The two treasuries are already separate (`split-admin-roles-devnet.mts`). The
 first two still share one key, which is the gap worth closing: that key can both
@@ -296,7 +296,7 @@ Two further steps remain, and neither is a key move:
 | `update_coin_terms` | protocol authority | – |
 | `crank_burn` | anyone | – |
 | `update_protocol_terms` | protocol authority (future baskets only) | – |
-| `create_basket` | anyone (becomes manager); costs $EETF | `[asset_mint, vault]` |
+| `create_basket` | anyone (becomes manager); costs $TOTE | `[asset_mint, vault]` |
 | `seed_basket` | manager, when supply is 0 | `[asset_mint, vault, manager_ata]` |
 | `mint_basket` | anyone | `[asset_mint, vault, user_ata]` |
 | `redeem_basket` | anyone | `[asset_mint, vault, user_ata]` |
@@ -387,7 +387,7 @@ hand-builds every instruction itself under `app/src/lib/etf/`.
 
 ## Roadmap
 
-1. ✅ **v0.1:** $EETF, baskets, in-kind mint/redeem, fees, events *(this release)*
+1. ✅ **v0.1:** $TOTE, baskets, in-kind mint/redeem, fees, events *(this release)*
 2. Jupiter-routed SOL deposits/redemptions, plus a SOL cash leg in `claim_fees`
 3. Seed a Solana pool and confirm visibility in the pump.fun and fomo UIs
 4. LayerZero OFT Adapter on Solana and an OFT contract on Robinhood Chain
@@ -396,8 +396,8 @@ hand-builds every instruction itself under `app/src/lib/etf/`.
    manager reserve and replacement proposals, timelocked changes
 7. Launchpad UI and basket pages (holdings, history, manager track record), plus a
    public tokenomics page: circulating supply, lifetime burn, burn per basket
-8. Treasury policy for revenue → $EETF → burn vault, and (lawyer permitting) a
-   creation-fee discount for managers who lock $EETF
+8. Treasury policy for revenue → $TOTE → burn vault, and (lawyer permitting) a
+   creation-fee discount for managers who lock $TOTE
 
 ## Disclaimer
 

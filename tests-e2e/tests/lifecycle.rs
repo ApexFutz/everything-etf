@@ -1,8 +1,8 @@
 //! End-to-end run of the whole protocol against the real, compiled program
 //! binary (target/deploy/everything_etf.so), executed inside litesvm.
 //!
-//! This is the "see it in action" test: protocol setup, $EETF genesis, a
-//! basket launch that burns $EETF, seeding, in-kind mint/redeem at NAV,
+//! This is the "see it in action" test: protocol setup, $TOTE genesis, a
+//! basket launch that burns $TOTE, seeding, in-kind mint/redeem at NAV,
 //! streaming-fee accrual, and manager/protocol fee claims — plus a few
 //! guard rails (fee caps, frozen-mint rejection, slippage).
 
@@ -12,7 +12,7 @@ use everything_etf::state::FeeRecipient;
 use tests_e2e::*;
 
 #[test]
-fn protocol_boots_and_mints_eetf() {
+fn protocol_boots_and_mints_tote() {
     let env = Env::new();
 
     let config = env.config_account();
@@ -35,7 +35,7 @@ fn full_basket_lifecycle() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
 
-    // Fund the manager with enough $EETF to pay the creation fee (100,000 EETF).
+    // Fund the manager with enough $TOTE to pay the creation fee (100,000 TOTE).
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
 
     let supply_before = env.mint_supply(env.coin_mint);
@@ -44,7 +44,7 @@ fn full_basket_lifecycle() {
         .expect("create_basket should succeed");
     assert!(!meta.logs.is_empty());
 
-    // 70% of the 100,000 EETF fee was burned, 30% went to the dev treasury.
+    // 70% of the 100,000 TOTE fee was burned, 30% went to the dev treasury.
     let supply_after = env.mint_supply(env.coin_mint);
     assert_eq!(supply_before - supply_after, 70_000 * 1_000_000_000);
     assert_eq!(
@@ -170,14 +170,14 @@ fn full_basket_lifecycle() {
     assert_eq!((b.mint_fee_bps, b.redeem_fee_bps, b.streaming_fee_bps), (0, 0, 0));
 }
 
-/// `CoinConfig.total_burned` must equal exactly the $EETF that has left the
+/// `CoinConfig.total_burned` must equal exactly the $TOTE that has left the
 /// supply — no more, no less — after a run that burns coins *and* basket tokens
 /// through every path that burns anything.
 ///
 /// This is the invariant `utils::burn_coin` exists to hold, and it's worth a
 /// behavioural test rather than trusting the doc comment, because the counter
 /// is the only on-chain evidence that supply actually shrank. It fails in
-/// both directions that matter: a future $EETF sink that burns without
+/// both directions that matter: a future $TOTE sink that burns without
 /// incrementing the counter under-reports, and a basket-token burn
 /// (`redeem_basket`, `claim_fees`) that wrongly increments it over-reports.
 #[test]
@@ -267,7 +267,7 @@ fn burn_vault_cranks_permissionlessly() {
     let assets = env.with_three_assets();
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 200_000 * 1_000_000_000);
     env.create_basket(&assets.mints, manager_coin, 0, 0, 0).unwrap();
-    // Dev treasury now holds 30,000 EETF from the creation fee; send it to the
+    // Dev treasury now holds 30,000 TOTE from the creation fee; send it to the
     // burn vault and crank it from an unrelated account (Alice).
     env.transfer_tokens(dev_coin_acc, env.burn_vault, &dev, 30_000 * 1_000_000_000);
     assert_eq!(env.token_balance(env.burn_vault), 30_000 * 1_000_000_000);

@@ -1,6 +1,6 @@
-# Everything ETF — web app
+# Tote — web app
 
-A Next.js frontend for the Everything ETF Solana program (`../programs/everything-etf`):
+A Next.js frontend for the Tote Solana program (`../programs/everything-etf`):
 connect a wallet, create baskets, seed/mint/redeem, claim fees, and run the one-time
 protocol/coin setup from `/admin`.
 
@@ -71,17 +71,17 @@ It refuses to send when nothing would change, and checks the signer really is
 
 ### Keeping the launch fee pegged to $15
 
-`creation_fee_coin` is stored as a fixed number of $EETF base units, but the policy is a
+`creation_fee_coin` is stored as a fixed number of $TOTE base units, but the policy is a
 dollar amount (see the root README's fee model). `scripts/repeg-coin-fee-devnet.mts` reads
-the live price, works out what $15 of $EETF is, and sends `update_coin_terms` when the
+the live price, works out what $15 of $TOTE is, and sends `update_coin_terms` when the
 on-chain amount has drifted more than 25%:
 
 ```bash
 npx tsx scripts/repeg-coin-fee-devnet.mts   --program-id <deployed program id>   --admin ../keys/devnet-admin.json   --dry-run
 ```
 
-$EETF has no market until it trades, so before launch there is no price to read and
-`--eetf-price` has to be passed explicitly. Run it on a schedule once it does trade.
+$TOTE has no market until it trades, so before launch there is no price to read and
+`--tote-price` has to be passed explicitly. Run it on a schedule once it does trade.
 
 ## Known simplifications (demo-grade, not production-grade)
 
@@ -92,5 +92,5 @@ $EETF has no market until it trades, so before launch there is no price to read 
   pair, and why a multisig and a timelock are still needed after it.
 
 - **One keypair plays every admin role** in the initialize script (upgrade authority,
-  protocol treasury, $EETF genesis owner, dev treasury) — fine for trying things out,
+  protocol treasury, $TOTE genesis owner, dev treasury) — fine for trying things out,
   not how you'd actually want a real deployment split.

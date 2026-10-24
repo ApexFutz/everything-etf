@@ -1,9 +1,9 @@
 /**
  * USD pricing for the launch fee.
  *
- * The $EETF creation fee is stored on-chain as a fixed number of base units,
+ * The $TOTE creation fee is stored on-chain as a fixed number of base units,
  * but the *policy* is a dollar amount: launching a basket should cost about
- * $15 of $EETF. A fixed token amount can't hold that on its own — if $EETF
+ * $15 of $TOTE. A fixed token amount can't hold that on its own — if $TOTE
  * appreciates 10x, launching costs 10x in real terms and launches stop, which
  * stops the burn that the whole supply story rests on; if it craters, the fee
  * stops filtering anything and spam baskets return.
@@ -16,7 +16,7 @@
  */
 import { COIN_DECIMALS } from "./constants";
 
-/** The policy: a basket launch costs this much in $EETF, whatever the price. */
+/** The policy: a basket launch costs this much in $TOTE, whatever the price. */
 export const CREATION_FEE_USD_TARGET = 15;
 
 /**
@@ -38,7 +38,7 @@ export const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112";
 
 /**
  * Spot USD price from Jupiter, or null when the token has no market yet —
- * which is the case for $EETF until it trades, so callers must handle it
+ * which is the case for $TOTE until it trades, so callers must handle it
  * rather than defaulting to a number.
  */
 export async function fetchUsdPrice(mint: string): Promise<number | null> {
@@ -107,7 +107,7 @@ export async function fetchUsdPrices(mints: string[]): Promise<Record<string, nu
   return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v.usdPrice]));
 }
 
-/** Base units of $EETF worth `usd` at `priceUsd` per whole coin. */
+/** Base units of $TOTE worth `usd` at `priceUsd` per whole coin. */
 export function coinAmountForUsd(usd: number, priceUsd: number): bigint {
   if (!(priceUsd > 0)) throw new Error("price must be positive");
   const whole = usd / priceUsd;
@@ -116,12 +116,12 @@ export function coinAmountForUsd(usd: number, priceUsd: number): bigint {
   return BigInt(Math.max(1, Math.round(whole))) * 10n ** BigInt(COIN_DECIMALS);
 }
 
-/** Dollar value of a raw $EETF amount. */
+/** Dollar value of a raw $TOTE amount. */
 export function usdValueOfCoin(amount: bigint, priceUsd: number): number {
   return (Number(amount) / 10 ** COIN_DECIMALS) * priceUsd;
 }
 
-/** The price at which `amount` of $EETF is worth exactly the target. */
+/** The price at which `amount` of $TOTE is worth exactly the target. */
 export function impliedPriceForTarget(amount: bigint, usd = CREATION_FEE_USD_TARGET): number {
   const whole = Number(amount) / 10 ** COIN_DECIMALS;
   return whole > 0 ? usd / whole : 0;

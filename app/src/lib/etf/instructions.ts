@@ -1,5 +1,5 @@
 /**
- * Instruction builders for the Everything ETF program.
+ * Instruction builders for the Tote program.
  *
  * Each function mirrors one `#[derive(Accounts)]` struct in
  * programs/everything-etf/src/instructions/*.rs — same field order, same

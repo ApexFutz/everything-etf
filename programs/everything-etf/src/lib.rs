@@ -1,6 +1,6 @@
-//! Everything ETF — launchpad for equal-weight, on-chain basket tokens.
+//! Tote — launchpad for equal-weight, on-chain basket tokens.
 //!
-//! v0.1 (this program): the $EETF coin, baskets, in-kind mint/redeem, fees, events.
+//! v0.1 (this program): the $TOTE coin, baskets, in-kind mint/redeem, fees, events.
 //! See README.md for the full roadmap.
 
 use anchor_lang::prelude::*;
@@ -56,7 +56,7 @@ pub mod everything_etf {
         instructions::set_profile::handler(ctx, name)
     }
 
-    /// Mint $EETF: whole fixed supply at once, then the mint authority is
+    /// Mint $TOTE: whole fixed supply at once, then the mint authority is
     /// revoked in the same instruction. Callable exactly once.
     pub fn initialize_coin(
         ctx: Context<InitializeCoin>,
@@ -75,12 +75,12 @@ pub mod everything_etf {
         instructions::update_coin_terms::handler(ctx, dev_treasury, creation_fee_coin, creation_burn_bps)
     }
 
-    /// Permissionlessly burn everything sitting in the $EETF burn vault.
+    /// Permissionlessly burn everything sitting in the $TOTE burn vault.
     pub fn crank_burn(ctx: Context<CrankBurn>) -> Result<()> {
         instructions::crank_burn::handler(ctx)
     }
 
-    /// Launch a new basket. Burns the $EETF creation fee and pays the dev share.
+    /// Launch a new basket. Burns the $TOTE creation fee and pays the dev share.
     pub fn create_basket<'info>(
         ctx: Context<'_, '_, 'info, 'info, CreateBasket<'info>>,
         params: CreateBasketParams,

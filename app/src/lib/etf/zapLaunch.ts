@@ -15,7 +15,7 @@
  *
  * Order is swaps → create → seed, chosen for how it fails rather than how it
  * succeeds. A swap that fails partway leaves the user holding some tokens and
- * nothing else: no basket, no burned $EETF, and they can simply try again.
+ * nothing else: no basket, no burned $TOTE, and they can simply try again.
  * Creating first would mean a failed swap left an empty basket behind with the
  * launch fee already destroyed.
  */

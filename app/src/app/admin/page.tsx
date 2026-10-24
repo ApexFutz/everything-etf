@@ -118,18 +118,18 @@ export default function AdminPage() {
         <InitializeCoinForm authority={config.authority} pending={pending} send={send} onDone={after} setError={setError} />
       )}
       {config && !coinConfig && !isAuthority && (
-        <Banner kind="info">$EETF hasn&apos;t been initialized yet. Connect as the protocol authority to do it.</Banner>
+        <Banner kind="info">$TOTE hasn&apos;t been initialized yet. Connect as the protocol authority to do it.</Banner>
       )}
 
       {coinConfig && (
         <Card>
-          <h2 className="mb-3 text-sm font-semibold text-muted">$EETF</h2>
+          <h2 className="mb-3 text-sm font-semibold text-muted">$TOTE</h2>
           <dl className="space-y-1 text-sm">
             <Row k="Mint" v={<AddressLink address={coinConfig.mint.toBase58()} />} />
             <Row k="Dev treasury" v={<AddressLink address={coinConfig.devTreasury.toBase58()} />} />
             <Row
               k="Creation fee"
-              v={`${formatBaseUnits(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF`}
+              v={`${formatBaseUnits(coinConfig.creationFeeCoin, COIN_DECIMALS)} TOTE`}
             />
             <Row k="Burn share" v={`${coinConfig.creationBurnBps} bps`} />
             <Row k="Lifetime burned" v={formatBaseUnits(coinConfig.totalBurned, COIN_DECIMALS)} />
@@ -226,9 +226,9 @@ function InitializeConfigForm({ pending, send, onDone, setError }: Common) {
 
 function InitializeCoinForm({ authority, pending, send, onDone, setError }: Common & { authority: PublicKey }) {
   const { publicKey } = useWallet();
-  const [name, setName] = useState("Everything ETF");
-  const [symbol, setSymbol] = useState("EETF");
-  const [uri, setUri] = useState("https://example.com/eetf.json");
+  const [name, setName] = useState("Tote");
+  const [symbol, setSymbol] = useState("TOTE");
+  const [uri, setUri] = useState("https://example.com/tote.json");
   const [genesisOwner, setGenesisOwner] = useState("");
   const [devTreasury, setDevTreasury] = useState("");
   const [creationFeeCoin, setCreationFeeCoin] = useState("100000");
@@ -278,7 +278,7 @@ function InitializeCoinForm({ authority, pending, send, onDone, setError }: Comm
           <TextInput value={devTreasury} onChange={(e) => setDevTreasury(e.target.value)} placeholder={publicKey?.toBase58()} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Creation fee (EETF)">
+          <Field label="Creation fee (TOTE)">
             <TextInput value={creationFeeCoin} onChange={(e) => setCreationFeeCoin(e.target.value)} />
           </Field>
           <Field label="Burn share (bps)" hint={`min ${MIN_CREATION_BURN_BPS}`}>
@@ -286,7 +286,7 @@ function InitializeCoinForm({ authority, pending, send, onDone, setError }: Comm
           </Field>
         </div>
         <Button type="submit" disabled={pending || !publicKey}>
-          {pending ? "Sending…" : "Initialize $EETF"}
+          {pending ? "Sending…" : "Initialize $TOTE"}
         </Button>
       </form>
     </Card>
@@ -369,7 +369,7 @@ function UpdateCoinTermsForm({ coinConfig, pending, send, onDone, setError }: Co
         <Field label="Dev treasury">
           <TextInput value={devTreasury} onChange={(e) => setDevTreasury(e.target.value)} />
         </Field>
-        <Field label="Creation fee (EETF)">
+        <Field label="Creation fee (TOTE)">
           <TextInput value={creationFeeCoin} onChange={(e) => setCreationFeeCoin(e.target.value)} />
         </Field>
         <Field label="Burn share (bps)" hint={`min ${MIN_CREATION_BURN_BPS}`}>

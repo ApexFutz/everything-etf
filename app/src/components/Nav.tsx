@@ -7,7 +7,7 @@ import { useState } from "react";
 
 const LINKS = [
   { href: "/baskets", label: "Baskets" },
-  { href: "/eetf", label: "$EETF" },
+  { href: "/tote", label: "$TOTE" },
   { href: "/baskets/new", label: "Create" },
   { href: "/terms", label: "Fees & terms" },
   { href: "/profile", label: "Profile" },
@@ -28,7 +28,7 @@ export function Nav() {
         <div className="flex items-center gap-7">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
             <BasketMark />
-            Everything ETF
+            Tote
           </Link>
           <nav className="hidden gap-5 text-sm sm:flex">
             {LINKS.map((l) => (

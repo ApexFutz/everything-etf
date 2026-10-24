@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Moves the protocol treasury and $EETF dev treasury off the deploying admin
+ * Moves the protocol treasury and $TOTE dev treasury off the deploying admin
  * wallet, onto their own dedicated keypairs — without touching any other
  * term. Run once, after scripts/initialize-devnet.mts.
  *
@@ -13,7 +13,7 @@
  *     [--url https://api.devnet.solana.com]
  *
  * What this can't do: rotate `Config.authority` (the protocol authority
- * itself) or the $EETF genesis owner — the program has no instruction for
+ * itself) or the $TOTE genesis owner — the program has no instruction for
  * either (see issue tracking "Add a way to rotate Config.authority"). The
  * program's upgrade authority is a separate thing, reassignable with the
  * ordinary `solana program set-upgrade-authority` (not this script).
@@ -72,7 +72,7 @@ async function main() {
   });
   console.log(`update_coin_terms: ${await sendAndConfirmTransaction(connection, new Transaction().add(...ix2), [authority])}`);
 
-  console.log("\nDone. Config.authority and the $EETF genesis owner are unchanged — the");
+  console.log("\nDone. Config.authority and the $TOTE genesis owner are unchanged — the");
   console.log("program has no instruction to rotate either (see the header comment).");
 }
 

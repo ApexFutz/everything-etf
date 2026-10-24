@@ -191,16 +191,16 @@ async function main() {
   console.log("OK  initialize_config: Config decodes back exactly as sent");
 
   // --- initialize_coin -----------------------------------------------------
-  const creationFeeCoin = 100_000n * 1_000_000_000n; // 100,000 EETF, 9 decimals
+  const creationFeeCoin = 100_000n * 1_000_000_000n; // 100,000 TOTE, 9 decimals
   const creationBurnBps = 7000;
   await send(
     svm,
     initializeCoinTx({
       authority: authority.publicKey,
       genesisOwner: authority.publicKey,
-      name: "Everything ETF",
-      symbol: "EETF",
-      uri: "https://example.com/eetf.json",
+      name: "Tote",
+      symbol: "TOTE",
+      uri: "https://example.com/tote.json",
       creationFeeCoin,
       creationBurnBps,
       devTreasury: authority.publicKey,
@@ -217,11 +217,11 @@ async function main() {
   assert.equal(coinConfig.totalBurned, 0n, "CoinConfig.totalBurned");
   console.log("OK  initialize_coin: CoinConfig decodes back exactly as sent");
 
-  // Mint authority must be gone — the one promise $EETF makes.
+  // Mint authority must be gone — the one promise $TOTE makes.
   const mintData = getAccountData(svm, coinMintPda()[0]);
   const mintAuthorityOption = mintData.readUInt32LE(0); // spl-token Mint: COption<Pubkey> tag first
-  assert.equal(mintAuthorityOption, 0, "$EETF mint authority must be revoked (COption::None)");
-  console.log("OK  initialize_coin: $EETF mint authority revoked");
+  assert.equal(mintAuthorityOption, 0, "$TOTE mint authority must be revoked (COption::None)");
+  console.log("OK  initialize_coin: $TOTE mint authority revoked");
 
   // --- update_authority ----------------------------------------------------
   // Two signers in one instruction, which no other instruction here has —
@@ -260,10 +260,10 @@ async function main() {
     "../src/lib/etf/metadata.js"
   );
 
-  // Decoder: against metadata the *program* wrote for $EETF via its own CPI.
+  // Decoder: against metadata the *program* wrote for $TOTE via its own CPI.
   const coinMeta = decodeMetadata(getAccountData(svm, metadataPda(coinMintPda()[0])));
-  assert.equal(coinMeta?.name, "Everything ETF", "decoded $EETF metadata name");
-  assert.equal(coinMeta?.symbol, "EETF", "decoded $EETF metadata symbol");
+  assert.equal(coinMeta?.name, "Tote", "decoded $TOTE metadata name");
+  assert.equal(coinMeta?.symbol, "TOTE", "decoded $TOTE metadata symbol");
   console.log("OK  metadata decoder reads what the program's own CPI wrote");
 
   // Encoder: our instruction, sent to the real Metaplex program, read back.

@@ -11,7 +11,7 @@ use crate::utils::burn_coin;
 /// and the only possible outcome is a smaller supply.
 ///
 /// The vault is a plain token account owned by the coin PDA, so protocol fee
-/// revenue swapped into $EETF (or anything anyone wants to retire) can simply
+/// revenue swapped into $TOTE (or anything anyone wants to retire) can simply
 /// be transferred in; this instruction is the only way it ever moves again.
 #[derive(Accounts)]
 pub struct CrankBurn<'info> {

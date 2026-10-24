@@ -27,6 +27,7 @@ import { getStandIn } from "@/lib/etf/demo";
 import { FeeRecipient } from "@/lib/etf/instructions";
 import { Config } from "@/lib/etf/accounts";
 import { BASKET_DECIMALS } from "@/lib/etf/constants";
+import { seedFromSol, venueLinks, type PoolSeed } from "@/lib/etf/pool";
 import {
   formatBaseUnits,
   formatBps,
@@ -151,6 +152,9 @@ export default function BasketPage() {
   const isManager = publicKey?.equals(basket.manager) ?? false;
   const isProtocolAuthority = (config && publicKey?.equals(config.authority)) ?? false;
   const isSeeded = supply > 0n;
+  // Pools and the aggregator UIs only index mainnet, so the seed action is
+  // mainnet-only; devnet gets the preview math but a disabled button.
+  const isMainnet = /mainnet/i.test(connection.rpcEndpoint);
   const accruedFees = basket.managerFeesAccrued + basket.protocolFeesAccrued;
 
   async function after(sig: string | null) {
@@ -332,6 +336,13 @@ export default function BasketPage() {
             send={send}
             onDone={after}
             setError={setError}
+          />
+          <SeedPoolCard
+            basket={basket}
+            nav={nav}
+            solPriceUsd={solPriceUsd}
+            isManager={isManager}
+            isMainnet={isMainnet}
           />
         </>
       )}
@@ -596,6 +607,115 @@ function ClaimCard({
       >
         {pending ? "Sending…" : label}
       </Button>
+    </Card>
+  );
+}
+
+/**
+ * Listing a basket token on a DEX.
+ *
+ * The token is already a mint; a basket/SOL pool is what makes it buyable in
+ * the aggregator-fed UIs (pump.fun, fomo, DexScreener). Seeding it *at NAV* is
+ * the whole trick — a constant-product pool opens at the ratio of its two
+ * deposits, so depositing equal USD value of basket token and SOL opens it at
+ * NAV, and the in-kind mint/redeem above keeps it there by arbitrage.
+ *
+ * The sizing math (`pool.ts`) runs live here so a manager sees exactly what
+ * they'd deposit. Execution is mainnet-only — pools and these UIs don't index
+ * devnet — so the button is disabled until the Raydium wiring lands at launch.
+ */
+function SeedPoolCard({
+  basket,
+  nav,
+  solPriceUsd,
+  isManager,
+  isMainnet,
+}: {
+  basket: BasketWithKey;
+  nav: BasketNav | null;
+  solPriceUsd: number | null;
+  isManager: boolean;
+  isMainnet: boolean;
+}) {
+  const [solAmount, setSolAmount] = useState("5");
+  const links = venueLinks(basket.mint.toBase58());
+
+  const amt = Number(solAmount);
+  const canSize =
+    nav !== null && solPriceUsd !== null && nav.navPerToken > 0 && nav.unpriced.length === 0;
+  let seed: PoolSeed | null = null;
+  let seedError: string | null = null;
+  if (nav && solPriceUsd && canSize && amt > 0) {
+    try {
+      seed = seedFromSol(amt, nav.navPerToken, solPriceUsd);
+    } catch (e) {
+      seedError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  const usd = (n: number) => (n < 0.01 ? n.toPrecision(3) : n.toFixed(4));
+
+  return (
+    <Card>
+      <h2 className="mb-3 text-sm font-semibold text-muted">List on a DEX</h2>
+      <p className="text-sm text-muted">
+        A basket/SOL pool makes this token buyable anywhere Solana tokens trade — pump.fun, fomo
+        and DexScreener all read the same pools. Arbitrage against the in-kind mint/redeem above
+        keeps the pool price near NAV.
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {(
+          [
+            ["Jupiter", links.jupiter],
+            ["DexScreener", links.dexscreener],
+            ["Birdeye", links.birdeye],
+            ["pump.fun", links.pumpfun],
+          ] as const
+        ).map(([label, href]) => (
+          <a key={label} className="underline" href={href} target="_blank" rel="noreferrer">
+            {label}
+          </a>
+        ))}
+      </div>
+      {!isMainnet && (
+        <p className="mt-2 text-xs text-muted">
+          These resolve once the token is seeded on mainnet; on devnet there&apos;s no pool and the
+          aggregators don&apos;t index it.
+        </p>
+      )}
+
+      {isManager && (
+        <div className="mt-4 space-y-3 border-t border-border pt-4">
+          <Field label="Seed size (SOL on the SOL side)" hint="Matched with basket tokens of equal value at NAV.">
+            <TextInput value={solAmount} onChange={(e) => setSolAmount(e.target.value)} />
+          </Field>
+          {seed && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <Stat
+                label="Deposit · basket tokens"
+                value={formatTokens(seed.basketTokenAmount, BASKET_DECIMALS, 4)}
+              />
+              <Stat label="Deposit · SOL" value={formatTokens(seed.solLamports, 9, 4)} />
+              <Stat label="Opens at" value={`$${usd(seed.priceUsdPerToken)}`} sub="= NAV per token" />
+            </div>
+          )}
+          {seedError && <Banner kind="error">{seedError}</Banner>}
+          {!canSize && (
+            <Banner kind="info">
+              Sizing needs a live NAV and SOL price. That isn&apos;t available on devnet, or for a
+              basket with any unpriced asset.
+            </Banner>
+          )}
+          <Button variant="secondary" disabled>
+            {isMainnet ? "Seed pool — Raydium wiring pending" : "Seed pool — mainnet only"}
+          </Button>
+          <p className="text-xs text-muted">
+            Seeding runs on mainnet-beta via a Raydium CPMM pool; the amounts above come straight
+            from the on-chain NAV. The create-pool transaction is wired at launch.
+          </p>
+        </div>
+      )}
     </Card>
   );
 }

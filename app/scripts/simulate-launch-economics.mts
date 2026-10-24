@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Models what a day of basket launches does to funds and to $EETF supply.
+ * Models what a day of basket launches does to funds and to $TOTE supply.
  *
  * Every number the program actually enforces is imported rather than retyped —
  * the fee caps from constants.ts, the $15 target from pricing.ts, and the rent
@@ -62,10 +62,10 @@ async function main() {
   const feeCoins = feeUsd / coinPrice;
 
   rule("ASSUMPTIONS");
-  row("$EETF supply (fixed, never minted again)", `${coins(supply)}`);
-  row("$EETF fully-diluted valuation", usd(fdv));
+  row("$TOTE supply (fixed, never minted again)", `${coins(supply)}`);
+  row("$TOTE fully-diluted valuation", usd(fdv));
   row("  implied price per coin", `$${coinPrice.toPrecision(3)}`);
-  row("Launch fee", usd(feeUsd), `${coins(feeCoins)} EETF`);
+  row("Launch fee", usd(feeUsd), `${coins(feeCoins)} TOTE`);
   row("  burned / to dev", `${burnBps / 100}%`, `${(10_000 - burnBps) / 100}%`);
   row("SOL creation fee", `${creationFeeSol} SOL`);
   row("SOL price", usd(solPrice), livePrice ? "(live)" : "(assumed)");
@@ -88,8 +88,8 @@ async function main() {
   rule();
   row("SOL out of pocket", solFmt(totalSolLamports), usd(toUsd(totalSolLamports)));
   row("  recoverable if accounts close", solFmt(cost.rentLamports), usd(toUsd(cost.rentLamports)));
-  row("$EETF burned", `${coins(feeCoins * burnShare)}`, usd(feeUsd * burnShare), "destroyed");
-  row("$EETF to dev treasury", `${coins(feeCoins * (1 - burnShare))}`, usd(feeUsd * (1 - burnShare)), "dev wallet");
+  row("$TOTE burned", `${coins(feeCoins * burnShare)}`, usd(feeUsd * burnShare), "destroyed");
+  row("$TOTE to dev treasury", `${coins(feeCoins * (1 - burnShare))}`, usd(feeUsd * (1 - burnShare)), "dev wallet");
   rule();
   row("Real cost to the manager", "", usd(toUsd(totalSolLamports - cost.rentLamports) + feeUsd));
 
@@ -106,7 +106,7 @@ async function main() {
   row("Managers pay, all in", solFmt(daySol), usd(toUsd(daySol)));
   row("  to protocol treasury (SOL)", solFmt(dayTreasury), usd(toUsd(dayTreasury)));
   row("  locked as account rent", solFmt(dayRent), usd(toUsd(dayRent)));
-  row("$EETF spent by managers", `${coins(feeCoins * b)}`, usd(feeUsd * b));
+  row("$TOTE spent by managers", `${coins(feeCoins * b)}`, usd(feeUsd * b));
   row("  burned", `${coins(burnedCoins)}`, usd(feeUsd * burnShare * b));
   row("  to dev treasury", `${coins(devCoins)}`, usd(feeUsd * (1 - burnShare) * b));
   rule();
@@ -115,9 +115,9 @@ async function main() {
 
   // ------------------------------------------------------------------ supply
   rule("SUPPLY IMPACT");
-  row("Supply before", `${coins(supply)} EETF`);
-  row("Burned today", `${coins(burnedCoins)} EETF`, pct(burnedCoins / supply));
-  row("Supply after", `${coins(supply - burnedCoins)} EETF`);
+  row("Supply before", `${coins(supply)} TOTE`);
+  row("Burned today", `${coins(burnedCoins)} TOTE`, pct(burnedCoins / supply));
+  row("Supply after", `${coins(supply - burnedCoins)} TOTE`);
   console.log();
   console.log("  Share of supply burned per launch = (fee x burn share) / FDV.");
   console.log("  Supply cancels out of that expression. The burn is fixed in DOLLARS,");
@@ -125,7 +125,7 @@ async function main() {
   console.log("  and shrinks as the valuation rises.");
   console.log();
   console.log(
-    `  ${"FDV".padStart(14)}${"price/coin".padStart(14)}${"EETF per launch".padStart(18)}${"burned/day".padStart(16)}${"% of supply/day".padStart(18)}`,
+    `  ${"FDV".padStart(14)}${"price/coin".padStart(14)}${"TOTE per launch".padStart(18)}${"burned/day".padStart(16)}${"% of supply/day".padStart(18)}`,
   );
   rule();
   for (const f of [50_000, 500_000, 5_000_000, 50_000_000, 500_000_000]) {

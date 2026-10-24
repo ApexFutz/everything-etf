@@ -98,7 +98,7 @@ async function main() {
   row("Fee schedule", `mint ${mintRate * 100}%`, `stream ${streamRate * 100}%/yr`);
   row("Redeem fee", "0%", "always free");
   row("Protocol share of fees", pct(protoShare));
-  row("$EETF FDV", usd(fdv));
+  row("$TOTE FDV", usd(fdv));
 
   // ----------------------------------------------------- one basket that hits
   const viralYears = dollarYears(seedAum, peakAum, rampDays, halfLifeDays);
@@ -174,14 +174,14 @@ async function main() {
   console.log("  Protocol income by source:");
   row("  fee share (basket tokens + assets)", usd(annualProtocolFees), pct(annualProtocolFees / (annualProtocolFees + annualSolFees + annualDevCoin)));
   row("  SOL creation fees", usd(annualSolFees), pct(annualSolFees / (annualProtocolFees + annualSolFees + annualDevCoin)));
-  row("  $EETF dev share", usd(annualDevCoin), pct(annualDevCoin / (annualProtocolFees + annualSolFees + annualDevCoin)));
+  row("  $TOTE dev share", usd(annualDevCoin), pct(annualDevCoin / (annualProtocolFees + annualSolFees + annualDevCoin)));
   rule();
   row("Total protocol + dev income", usd(annualProtocolFees + annualSolFees + annualDevCoin));
   row("Burned automatically (creation fee)", usd(annualCreationBurn));
 
   // -------------------------------------------------------------- burn yields
-  rule("WHAT THIS DOES FOR $EETF");
-  console.log("  Burn yield = dollars of $EETF retired per year / FDV. Read as a");
+  rule("WHAT THIS DOES FOR $TOTE");
+  console.log("  Burn yield = dollars of $TOTE retired per year / FDV. Read as a");
   console.log("  buyback yield: what the burn returns to a holder.\n");
   console.log(`  ${"FDV".padStart(14)}${"creation burn".padStart(17)}${"+ fee share".padStart(17)}${"total".padStart(13)}`);
   rule();
@@ -199,7 +199,7 @@ async function main() {
   console.log("  which is the thing that grows when the protocol succeeds.");
   console.log();
   console.log("  Caveat the program does not solve: that revenue arrives as basket");
-  console.log("  tokens and underlying assets. Converting it to $EETF and sending it to");
+  console.log("  tokens and underlying assets. Converting it to $TOTE and sending it to");
   console.log("  the burn vault is a discretionary off-chain step today.");
 
   // --------------------------------------------------------------- claim drag

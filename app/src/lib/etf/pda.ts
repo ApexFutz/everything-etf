@@ -57,7 +57,7 @@ export function feeEscrowAta(basket: PublicKey, basketMint: PublicKey): PublicKe
   return getAssociatedTokenAddressSync(basketMint, basket, true);
 }
 
-/** The $EETF burn vault is the coin-config PDA's own $EETF ATA. */
+/** The $TOTE burn vault is the coin-config PDA's own $TOTE ATA. */
 export function burnVaultAta(coinConfig: PublicKey, coinMint: PublicKey): PublicKey {
   return getAssociatedTokenAddressSync(coinMint, coinConfig, true);
 }

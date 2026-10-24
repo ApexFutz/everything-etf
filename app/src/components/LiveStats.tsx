@@ -49,12 +49,12 @@ export function LiveStats() {
       ? [
           { label: "Baskets launched", value: state.config.basketCount.toString(), tone: "accent" },
           {
-            label: "$EETF burned",
+            label: "$TOTE burned",
             value: whole(state.coin.totalBurned, COIN_DECIMALS),
             tone: "burn",
           },
           {
-            label: "$EETF circulating",
+            label: "$TOTE circulating",
             value: whole(COIN_TOTAL_SUPPLY - state.coin.totalBurned, COIN_DECIMALS),
           },
           {
@@ -80,7 +80,7 @@ export function LiveStats() {
               </div>
             </div>
           ))
-        : ["Baskets launched", "$EETF burned", "$EETF circulating", "Supply retired"].map((label) => (
+        : ["Baskets launched", "$TOTE burned", "$TOTE circulating", "Supply retired"].map((label) => (
             <div key={label} className="bg-surface px-4 py-4">
               <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
               <div className="mt-1 text-2xl font-semibold text-muted">

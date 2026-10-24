@@ -27,7 +27,7 @@ export default function Home() {
           <p className="mt-5 max-w-xl text-base leading-relaxed text-muted">
             Bundle {MIN_ASSETS}–{MAX_ASSETS} Solana tokens into one tradeable basket. Mint and redeem
             in kind at NAV, so the basket is always backed by exactly what it holds — and every
-            launch permanently burns $EETF supply.
+            launch permanently burns $TOTE supply.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <ButtonLink href="/baskets">Browse baskets</ButtonLink>
@@ -95,17 +95,17 @@ export default function Home() {
           </ol>
         </Section>
 
-        {/* ------------------------------------------------------------- $EETF */}
+        {/* ------------------------------------------------------------- $TOTE */}
         <Section
-          id="eetf"
-          title="$EETF: the launchpad working is the tokenomics"
+          id="tote"
+          title="$TOTE: the launchpad working is the tokenomics"
           lead="One fixed-supply coin for the whole protocol. No inflation schedule, no staking emissions, no rebase — after genesis, the only supply event is a burn."
         >
           <div className="grid gap-4 lg:grid-cols-3">
             <Card>
               <h3 className="font-semibold">Fixed at genesis</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                {formatTokens(COIN_TOTAL_SUPPLY, 9)} EETF minted once, inside{" "}
+                {formatTokens(COIN_TOTAL_SUPPLY, 9)} TOTE minted once, inside{" "}
                 <code className="text-xs">initialize_coin</code>, which revokes the mint authority in
                 the same transaction and fails if it isn&apos;t actually gone. Supply can only ever
                 fall.
@@ -114,7 +114,7 @@ export default function Home() {
             <Card>
               <h3 className="font-semibold">Every launch burns</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                Creating a basket costs $EETF. At least{" "}
+                Creating a basket costs $TOTE. At least{" "}
                 <strong className="text-burn">{formatBps(MIN_CREATION_BURN_BPS)}</strong> of that fee
                 is burned on the spot — a floor the protocol authority cannot lower — and the rest
                 funds development.
@@ -123,7 +123,7 @@ export default function Home() {
             <Card>
               <h3 className="font-semibold">A one-way burn vault</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                Anyone can send $EETF to the burn vault, and the only instruction that moves it again
+                Anyone can send $TOTE to the burn vault, and the only instruction that moves it again
                 destroys it. Cranking that burn is permissionless: the only possible outcome is a
                 smaller supply.
               </p>
@@ -133,7 +133,7 @@ export default function Home() {
           <Card className="mt-4 border-dashed">
             <h3 className="font-semibold">What the coin deliberately is not</h3>
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              $EETF does <strong>not</strong> entitle holders to any share of fees, is{" "}
+              $TOTE does <strong>not</strong> entitle holders to any share of fees, is{" "}
               <strong>not</strong> required to hold or trade a basket token, and does{" "}
               <strong>not</strong> vote on anything. Adding a revenue share or governance raises a
               securities question that belongs with a lawyer before it belongs in code.
@@ -141,7 +141,7 @@ export default function Home() {
           </Card>
 
           <div className="mt-4">
-            <Link href="/eetf" className="text-sm text-accent underline decoration-dotted underline-offset-2">
+            <Link href="/tote" className="text-sm text-accent underline decoration-dotted underline-offset-2">
               See live supply and burn figures →
             </Link>
           </div>
@@ -166,7 +166,7 @@ export default function Home() {
                   ["Mint a basket token", "Nobody — it is free", formatBps(MAX_MINT_FEE_BPS)],
                   ["Redeem", "Nobody — it is free", formatBps(MAX_REDEEM_FEE_BPS)],
                   ["Hold (annual)", "Nobody — it is free", formatBps(MAX_STREAMING_FEE_BPS)],
-                  ["Launch a basket", "The creator, once", "$EETF + SOL"],
+                  ["Launch a basket", "The creator, once", "$TOTE + SOL"],
                 ].map(([fee, who, cap]) => (
                   <tr key={fee}>
                     <td className="px-4 py-2.5 font-medium">{fee}</td>
@@ -179,7 +179,7 @@ export default function Home() {
           </div>
           <p className="mt-3 text-sm leading-relaxed text-muted">
             <strong>A basket charges nothing, ever.</strong> Creating one costs a one-time launch
-            fee in $EETF and SOL, and after that minting, holding and redeeming are all free. Those
+            fee in $TOTE and SOL, and after that minting, holding and redeeming are all free. Those
             three caps are zero in the compiled program, not settings, so no authority can raise
             them on a basket you already hold.
           </p>

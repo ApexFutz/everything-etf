@@ -354,7 +354,7 @@ export function createBasketTx(args: {
   const devCoinAccount = getAssociatedTokenAddressSync(coinMint, args.devTreasury);
   const vaults = args.assets.map((m) => getAssociatedTokenAddressSync(m, basket, true));
 
-  // create_basket requires both $EETF accounts to already exist — it
+  // create_basket requires both $TOTE accounts to already exist — it
   // doesn't create either itself. Idempotent-create covers the manager's
   // (who's paying) and, in case nobody's set it up yet, the dev treasury's.
   const pre = [

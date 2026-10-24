@@ -82,9 +82,10 @@ jobs:
 
       - run: npm ci
       - run: npx eslint src scripts tests
-      # Pure maths, no chain and no network, so it runs in this job rather
+      # Pure maths, no chain and no network, so these run in this job rather
       # than waiting on the program build the consistency job needs.
       - run: npx tsx tests/weights.mts
+      - run: npx tsx tests/pool.mts
       # `next build` type-checks as part of its own pipeline (it generates
       # route types like LayoutProps first, which a standalone `tsc --noEmit`
       # can't see on a clean checkout) — no separate tsc step needed.

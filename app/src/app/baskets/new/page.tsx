@@ -98,7 +98,7 @@ export default function NewBasketPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [coinConfig, setCoinConfig] = useState<CoinConfig | null>(null);
   const [cost, setCost] = useState<CreateCostEstimate | null>(null);
-  /** Live USD per $EETF and per SOL, for showing what the fees actually cost. */
+  /** Live USD per $TOTE and per SOL, for showing what the fees actually cost. */
   const [prices, setPrices] = useState<{ coin: number | null; sol: number | null }>({
     coin: null,
     sol: null,
@@ -233,7 +233,7 @@ export default function NewBasketPage() {
   }, [connection, assets.length]);
 
   // Dollar values are a nicety, so a failed or missing price just hides them —
-  // $EETF has no market until it trades, and `fetchUsdPrice` returns null then.
+  // $TOTE has no market until it trades, and `fetchUsdPrice` returns null then.
   useEffect(() => {
     let cancelled = false;
     if (!coinConfig) return;
@@ -537,7 +537,7 @@ export default function NewBasketPage() {
           return setError(
             `Stopped at "${failed.label}" (step ${result.failedAt + 1} of ${steps.length}). ` +
               (failed.kind === "swap"
-                ? `${landed} step${landed === 1 ? "" : "s"} already went through, so you now hold part of the basket's tokens — nothing was created and no $EETF was burned. Try again, or raise the slippage.`
+                ? `${landed} step${landed === 1 ? "" : "s"} already went through, so you now hold part of the basket's tokens — nothing was created and no $TOTE was burned. Try again, or raise the slippage.`
                 : `The tokens were bought${failed.kind === "seed" ? " and the basket was created — seed it from its page" : ""}.`) +
               ` ${describeError(result.error)}`,
           );
@@ -832,7 +832,7 @@ export default function NewBasketPage() {
 
               <CostRow label="Launch fee">
                 <span className="tabular-nums">
-                  {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF
+                  {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} TOTE
                   {coinFeeUsd !== null && (
                     <span className="text-muted"> ≈ {money(coinFeeUsd)}</span>
                   )}
@@ -842,7 +842,7 @@ export default function NewBasketPage() {
                 {formatBps(coinConfig.creationBurnBps)} of that is burned forever
               </div>
               <div className="pl-4 text-xs text-muted">
-                Targets {money(CREATION_FEE_USD_TARGET)} a launch, re-quoted in EETF as the price
+                Targets {money(CREATION_FEE_USD_TARGET)} a launch, re-quoted in TOTE as the price
                 moves.
               </div>
 
@@ -870,7 +870,7 @@ export default function NewBasketPage() {
                       )}
                     </div>
                     <div>
-                      {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF
+                      {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} TOTE
                       {coinFeeUsd !== null && (
                         <span className="font-normal text-muted"> ≈ {money(coinFeeUsd)}</span>
                       )}
@@ -945,7 +945,7 @@ export default function NewBasketPage() {
                 [
                   "You are paying now, in two transactions",
                   <>
-                    {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} EETF
+                    {formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} TOTE
                     {coinFeeUsd !== null && <> (≈{money(coinFeeUsd)})</>}, of which{" "}
                     {formatBps(coinConfig.creationBurnBps)} is burned forever, plus ~
                     {formatTokens(solCost, 9, 4)} SOL

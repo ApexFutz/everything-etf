@@ -19,14 +19,14 @@ pub struct InitializeCoinParams {
     pub symbol: String,
     /// Metadata JSON URI. **Permanent** — the metadata is created immutable.
     pub uri: String,
-    /// Basket-creation fee in $EETF base units.
+    /// Basket-creation fee in $TOTE base units.
     pub creation_fee_coin: u64,
     /// Share of each creation fee that is burned (>= MIN_CREATION_BURN_BPS).
     pub creation_burn_bps: u16,
     pub dev_treasury: Pubkey,
 }
 
-/// Creates $EETF: mints the entire fixed supply to `genesis_account` and then
+/// Creates $TOTE: mints the entire fixed supply to `genesis_account` and then
 /// revokes the mint authority in the same transaction, so the supply is capped
 /// forever and can only fall as baskets are created.
 ///
@@ -76,7 +76,7 @@ pub struct InitializeCoin<'info> {
     )]
     pub genesis_account: Box<Account<'info, TokenAccount>>,
 
-    /// One-way sink: anyone can send $EETF here, `crank_burn` destroys it.
+    /// One-way sink: anyone can send $TOTE here, `crank_burn` destroys it.
     #[account(
         init,
         payer = authority,
@@ -177,7 +177,7 @@ pub fn handler(ctx: Context<InitializeCoin>, params: InitializeCoinParams) -> Re
         COIN_TOTAL_SUPPLY,
     )?;
 
-    // Revoke it, in the same transaction. Nothing can ever mint $EETF again.
+    // Revoke it, in the same transaction. Nothing can ever mint $TOTE again.
     token::set_authority(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),

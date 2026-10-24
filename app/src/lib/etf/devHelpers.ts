@@ -1,5 +1,5 @@
 /**
- * Convenience helpers that have nothing to do with the Everything ETF
+ * Convenience helpers that have nothing to do with the Tote
  * program itself — they create plain SPL mints and fund them — so a demo
  * user doesn't need their own pre-existing devnet tokens to try creating a
  * basket. Not part of the protocol; just test fixtures.

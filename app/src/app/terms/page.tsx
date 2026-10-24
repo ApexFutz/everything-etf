@@ -44,10 +44,10 @@ export default function TermsPage() {
           <p>Three separate things, and only two of them are fees:</p>
           <dl className="space-y-3">
             <div>
-              <dt className="font-medium">$EETF launch fee</dt>
+              <dt className="font-medium">$TOTE launch fee</dt>
               <dd className="text-muted">
-                Targets about ${CREATION_FEE_USD_TARGET} worth of $EETF. It is stored on-chain as a
-                fixed number of coins and re-quoted as the $EETF price moves, so the dollar cost
+                Targets about ${CREATION_FEE_USD_TARGET} worth of $TOTE. It is stored on-chain as a
+                fixed number of coins and re-quoted as the $TOTE price moves, so the dollar cost
                 stays roughly flat rather than tracking the token. The exact coin amount is shown on
                 the launch page before you confirm.{" "}
                 <strong>At least {formatBps(MIN_CREATION_BURN_BPS)} of it is burned</strong> —
@@ -213,7 +213,7 @@ export default function TermsPage() {
               <strong className="font-medium text-foreground">
                 The launch fee is a cost, not an investment.
               </strong>{" "}
-              You pay it once and it does not come back. Most of the $EETF portion is burned
+              You pay it once and it does not come back. Most of the $TOTE portion is burned
               outright. If the basket goes nowhere, that money is simply gone.
             </li>
             <li>

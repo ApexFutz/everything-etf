@@ -30,9 +30,9 @@ pub struct CreateBasketParams {
 /// Creates a basket: state account, basket token mint + metadata, fee escrow,
 /// and one vault (ATA owned by the basket PDA) per underlying asset.
 ///
-/// Charges the manager the $EETF creation fee: `creation_burn_bps` of it is
+/// Charges the manager the $TOTE creation fee: `creation_burn_bps` of it is
 /// burned on the spot and the remainder goes to the dev treasury. Every basket
-/// that has ever been launched is therefore a permanent cut in $EETF supply.
+/// that has ever been launched is therefore a permanent cut in $TOTE supply.
 ///
 /// Remaining accounts: `[asset_mint, asset_vault]` per asset, in order.
 #[derive(Accounts)]
@@ -82,11 +82,11 @@ pub struct CreateBasket<'info> {
     #[account(mut, address = coin_config.mint)]
     pub coin_mint: Box<Account<'info, Mint>>,
 
-    /// Manager's $EETF account; the creation fee is taken from here.
+    /// Manager's $TOTE account; the creation fee is taken from here.
     #[account(mut, token::mint = coin_mint, token::authority = manager)]
     pub manager_coin_account: Box<Account<'info, TokenAccount>>,
 
-    /// Dev treasury's $EETF account; receives the development share.
+    /// Dev treasury's $TOTE account; receives the development share.
     #[account(
         mut,
         token::mint = coin_mint,
@@ -157,7 +157,7 @@ pub fn handler<'info>(
         assets.push(mint.key());
     }
 
-    // SOL creation fee -> protocol treasury (0 once the $EETF fee is live).
+    // SOL creation fee -> protocol treasury (0 once the $TOTE fee is live).
     let creation_fee = ctx.accounts.config.creation_fee_lamports;
     if creation_fee > 0 {
         system_program::transfer(
@@ -172,7 +172,7 @@ pub fn handler<'info>(
         )?;
     }
 
-    // $EETF creation fee: burn leg first, then the development leg. Both are
+    // $TOTE creation fee: burn leg first, then the development leg. Both are
     // signed by the manager, so nothing can be taken from anyone else.
     let coin_fee = ctx.accounts.coin_config.creation_fee_coin;
     let (burned, to_dev) =

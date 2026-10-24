@@ -260,10 +260,10 @@ fn create_basket_rejects_any_nonzero_fee() {
 }
 
 #[test]
-fn create_basket_fails_without_enough_eetf_for_the_fee() {
+fn create_basket_fails_without_enough_tote_for_the_fee() {
     let mut env = Env::new();
     let assets = env.with_three_assets();
-    // Fund with less than the 100,000 EETF creation fee.
+    // Fund with less than the 100,000 TOTE creation fee.
     let manager_coin = env.fund_coin(pubkey_of(&env.manager), 1_000 * 1_000_000_000);
     let res = env.create_basket(&assets.mints, manager_coin, 0, 0, 0);
     // SPL token's own insufficient-funds check, surfaced as a raw instruction

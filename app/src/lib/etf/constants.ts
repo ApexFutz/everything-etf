@@ -1,5 +1,5 @@
 /**
- * Everything ETF: protocol constants mirrored from the Rust program
+ * Tote: protocol constants mirrored from the Rust program
  * (programs/everything-etf/src/constants.rs). Keep these two files in sync —
  * nothing here is derived automatically from the Rust source.
  */
@@ -28,7 +28,7 @@ export const MAX_PROFILE_NAME_LEN = 32;
 export const BASKET_DECIMALS = 9;
 export const COIN_DECIMALS = 9;
 
-export const COIN_TOTAL_SUPPLY = 1_000_000_000n * 1_000_000_000n; // 1e9 EETF, 9 decimals
+export const COIN_TOTAL_SUPPLY = 1_000_000_000n * 1_000_000_000n; // 1e9 TOTE, 9 decimals
 
 export const MIN_CREATION_BURN_BPS = 5_000; // 50%
 export const MAX_CREATION_FEE_COIN = 10_000_000n * 1_000_000_000n; // 1% of genesis supply

@@ -60,13 +60,13 @@ pub const BASKET_SEED: &[u8] = b"basket";
 pub const BASKET_MINT_SEED: &[u8] = b"basket_mint";
 
 // ---------------------------------------------------------------------------
-// $EETF — the protocol coin
+// $TOTE — the protocol coin
 // ---------------------------------------------------------------------------
 
 /// Coin decimals (same as basket tokens).
 pub const COIN_DECIMALS: u8 = 9;
 
-/// Fixed supply: 1,000,000,000 EETF. Minted once in `initialize_coin`, which
+/// Fixed supply: 1,000,000,000 TOTE. Minted once in `initialize_coin`, which
 /// then revokes the mint authority forever. Supply can only ever go down.
 pub const COIN_TOTAL_SUPPLY: u64 = 1_000_000_000 * 1_000_000_000;
 

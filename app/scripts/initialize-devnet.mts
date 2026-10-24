@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * One-time admin setup: initialize_config, then initialize_coin ($EETF
+ * One-time admin setup: initialize_config, then initialize_coin ($TOTE
  * genesis). Run once, right after scripts/deploy-devnet.sh at the repo root.
  *
  * Usage (from app/):
@@ -11,12 +11,12 @@
  *     [--creation-fee-sol 0.1] [--protocol-share-bps 1000] \
  *     [--coin-creation-fee 100000] [--coin-burn-bps 7000]
  *
- * The coin fee targets ~$15 per launch; 300,000 EETF is $15 at a $50k
- * fully-diluted valuation. Once $EETF has a price, scripts/repeg-coin-fee-devnet.mts
+ * The coin fee targets ~$15 per launch; 300,000 TOTE is $15 at a $50k
+ * fully-diluted valuation. Once $TOTE has a price, scripts/repeg-coin-fee-devnet.mts
  * re-quotes it instead of this default.
  *
  * The admin keypair is used as: program upgrade authority (required by
- * initialize_config), protocol treasury, $EETF genesis owner, and $EETF dev
+ * initialize_config), protocol treasury, $TOTE genesis owner, and $TOTE dev
  * treasury — fine for a devnet demo; split these for a real deployment.
  */
 import { readFileSync } from "node:fs";
@@ -87,13 +87,13 @@ async function main() {
     console.log("CoinConfig already initialized, skipping initialize_coin:");
     console.log(existingCoin);
   } else {
-    console.log("\nSending initialize_coin (mints the entire fixed $EETF supply)...");
+    console.log("\nSending initialize_coin (mints the entire fixed $TOTE supply)...");
     const ixs = initializeCoinTx({
       authority: admin.publicKey,
       genesisOwner: admin.publicKey,
-      name: "Everything ETF",
-      symbol: "EETF",
-      uri: "https://example.com/eetf.json",
+      name: "Tote",
+      symbol: "TOTE",
+      uri: "https://example.com/tote.json",
       creationFeeCoin: parseToBaseUnits(coinCreationFee, COIN_DECIMALS),
       creationBurnBps: Number(coinBurnBps),
       devTreasury: admin.publicKey,

@@ -1,4 +1,4 @@
-//! Test harness for the Everything ETF program.
+//! Test harness for the Tote program.
 //!
 //! Loads the real SBF binary into [`litesvm`], an in-process SVM, and drives it
 //! with transactions built from the program's own generated client types, so the
@@ -98,7 +98,7 @@ pub fn writable(p: Pubkey) -> anchor_lang::solana_program::instruction::AccountM
 // Environment
 // ---------------------------------------------------------------------------
 
-/// A deployed protocol: program loaded, config initialized, $EETF minted.
+/// A deployed protocol: program loaded, config initialized, $TOTE minted.
 pub struct Env {
     pub svm: LiteSVM,
     /// Protocol authority (also the program's upgrade authority) and fee payer.
@@ -201,13 +201,13 @@ impl Env {
         }
     }
 
-    /// The full setup most tests want: config + $EETF live, manager funded with
-    /// enough $EETF to launch baskets.
+    /// The full setup most tests want: config + $TOTE live, manager funded with
+    /// enough $TOTE to launch baskets.
     pub fn new() -> Self {
         let mut env = Self::bare();
         env.initialize_config(SOL / 4, 1_000).unwrap();
         env.initialize_coin(100_000 * 1_000_000_000, 7_000).unwrap();
-        // `create_basket` requires the dev treasury's $EETF account to
+        // `create_basket` requires the dev treasury's $TOTE account to
         // already exist; it is not created for you. Use its ATA, matching
         // the address precomputed in `dev_coin_account`.
         let dev_treasury = pk(env.dev_treasury.pubkey());
@@ -493,9 +493,9 @@ impl Env {
             },
             etf_ix::InitializeCoin {
                 params: everything_etf::instructions::initialize_coin::InitializeCoinParams {
-                    name: "Everything ETF".to_string(),
-                    symbol: "EETF".to_string(),
-                    uri: "https://everything.etf/eetf.json".to_string(),
+                    name: "Tote".to_string(),
+                    symbol: "TOTE".to_string(),
+                    uri: "https://example.com/tote.json".to_string(),
                     creation_fee_coin,
                     creation_burn_bps,
                     dev_treasury: pk(self.dev_treasury.pubkey()),
@@ -507,7 +507,7 @@ impl Env {
         self.send(&[ix], &[&authority])
     }
 
-    /// Gives `owner` an $EETF account funded from the genesis allocation.
+    /// Gives `owner` an $TOTE account funded from the genesis allocation.
     pub fn fund_coin(&mut self, owner: Pubkey, amount: u64) -> Pubkey {
         let account = self.create_token_account(self.coin_mint, owner);
         let genesis = self.genesis_owner.insecure_clone();
@@ -617,7 +617,7 @@ impl Env {
             manager_coin_account,
             "Equal Weight Three",
             "EW3",
-            "https://everything.etf/ew3.json",
+            "https://example.com/ew3.json",
             mint_fee_bps,
             redeem_fee_bps,
             streaming_fee_bps,
