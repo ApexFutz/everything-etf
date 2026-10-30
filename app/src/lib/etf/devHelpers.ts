@@ -46,15 +46,20 @@ export interface StandInSpec {
  *
  * Deliberately generous with the supply — the point is to remove "go find some
  * tokens" from the path, not to simulate scarcity.
+ *
+ * Instructions come back grouped one array per mint: each mint is five
+ * instructions, and three of them in a single transaction overruns the 1232-byte
+ * limit, so the caller sends one transaction per group (the matching `mints[i]`
+ * co-signs group `i`).
  */
 export async function createStandInMints(
   connection: Connection,
   payer: PublicKey,
   recipient: PublicKey,
   specs: StandInSpec[],
-): Promise<{ instructions: TransactionInstruction[]; mints: Keypair[] }> {
+): Promise<{ groups: TransactionInstruction[][]; mints: Keypair[] }> {
   const rent = await getMinimumBalanceForRentExemptMint(connection);
-  const instructions: TransactionInstruction[] = [];
+  const groups: TransactionInstruction[][] = [];
   const mints: Keypair[] = [];
 
   for (const spec of specs) {
@@ -62,7 +67,7 @@ export async function createStandInMints(
     mints.push(mint);
     const ata = getAssociatedTokenAddressSync(mint.publicKey, recipient);
     const supply = BigInt(spec.supply ?? 1_000_000_000) * 10n ** BigInt(spec.decimals);
-    instructions.push(
+    groups.push([
       SystemProgram.createAccount({
         fromPubkey: payer,
         newAccountPubkey: mint.publicKey,
@@ -85,9 +90,9 @@ export async function createStandInMints(
         symbol: spec.symbol.slice(0, 10),
         uri: "",
       }),
-    );
+    ]);
   }
-  return { instructions, mints };
+  return { groups, mints };
 }
 
 /**
@@ -95,6 +100,10 @@ export async function createStandInMints(
  * `count` brand-new SPL mints with no freeze authority, mint 1,000,000 whole
  * tokens of each straight to `recipient`, and give each one Metaplex metadata
  * so it shows up in the token picker by ticker rather than as a bare address.
+ *
+ * Grouped one array per mint for the same reason as `createStandInMints`: five
+ * instructions each won't share a transaction past a couple of mints. The
+ * caller sends one transaction per group, with `mints[i]` co-signing group `i`.
  */
 export async function createAndFundTestMints(
   connection: Connection,
@@ -102,16 +111,16 @@ export async function createAndFundTestMints(
   recipient: PublicKey,
   count: number,
   decimals = 9,
-): Promise<{ instructions: TransactionInstruction[]; mints: Keypair[] }> {
+): Promise<{ groups: TransactionInstruction[][]; mints: Keypair[] }> {
   const rent = await getMinimumBalanceForRentExemptMint(connection);
-  const instructions: TransactionInstruction[] = [];
+  const groups: TransactionInstruction[][] = [];
   const mints: Keypair[] = [];
 
   for (let i = 0; i < count; i++) {
     const mint = Keypair.generate();
     mints.push(mint);
     const ata = getAssociatedTokenAddressSync(mint.publicKey, recipient);
-    instructions.push(
+    groups.push([
       SystemProgram.createAccount({
         fromPubkey: payer,
         newAccountPubkey: mint.publicKey,
@@ -134,7 +143,7 @@ export async function createAndFundTestMints(
         symbol: TEST_TOKENS[i % TEST_TOKENS.length].symbol,
         uri: "",
       }),
-    );
+    ]);
   }
-  return { instructions, mints };
+  return { groups, mints };
 }

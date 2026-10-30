@@ -1,7 +1,12 @@
 "use client";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey, Transaction } from "@solana/web3.js";
+import { Keypair, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
+import {
+  getAccount,
+  getAssociatedTokenAddressSync,
+  TokenAccountNotFoundError,
+} from "@solana/spl-token";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -102,6 +107,17 @@ export default function NewBasketPage() {
   const [prices, setPrices] = useState<{ coin: number | null; sol: number | null }>({
     coin: null,
     sol: null,
+  });
+  /**
+   * The connected wallet's own SOL and $TOTE, so the launch button can say
+   * *why* it won't go — a fresh devnet wallet holds no $TOTE, and the creation
+   * fee is burned from it, so "not enough $TOTE" is the usual first wall.
+   * `null` means not-yet-known (still loading, or the read failed); only a
+   * known-short balance blocks, so an RPC hiccup never falsely stops a launch.
+   */
+  const [balances, setBalances] = useState<{ sol: bigint | null; coin: bigint | null }>({
+    sol: null,
+    coin: null,
   });
 
   /**
@@ -249,6 +265,35 @@ export default function NewBasketPage() {
     };
   }, [coinConfig]);
 
+  // The wallet's SOL and $TOTE balances, read fresh so the launch gate can name
+  // a shortfall instead of letting a doomed transaction fail on-chain. Re-reads
+  // after a launch or a mint, since those change what the wallet holds.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!publicKey || !coinConfig) {
+        if (!cancelled) setBalances({ sol: null, coin: null });
+        return;
+      }
+      const sol = await connection
+        .getBalance(publicKey)
+        .then((n) => BigInt(n))
+        .catch(() => null);
+      let coin: bigint | null = null;
+      try {
+        const ata = getAssociatedTokenAddressSync(coinConfig.mint, publicKey);
+        coin = (await getAccount(connection, ata)).amount;
+      } catch (e) {
+        // No token account yet = a true zero balance; anything else is unknown.
+        coin = e instanceof TokenAccountNotFoundError ? 0n : null;
+      }
+      if (!cancelled) setBalances({ sol, coin });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, publicKey, coinConfig, done, minting, creatingStandIns]);
+
   // Prices for whatever is currently selected. Devnet test mints have none,
   // which is the case the manual fallback below exists for.
   useEffect(() => {
@@ -379,6 +424,13 @@ export default function NewBasketPage() {
 
   const pendingStandIns = assets.filter((a) => a.pendingStandIn);
 
+  // Known-short balances. `null` (unknown) never blocks — only a balance we've
+  // actually read and found too small does, so a slow or failed read can't
+  // falsely stop a launch.
+  const solShort = balances.sol !== null && balances.sol < solCost;
+  const coinShort =
+    balances.coin !== null && coinConfig !== null && balances.coin < coinConfig.creationFeeCoin;
+
   const canSubmit = Boolean(
     publicKey &&
       name &&
@@ -387,14 +439,91 @@ export default function NewBasketPage() {
       config &&
       coinConfig &&
       acknowledged &&
-      pendingStandIns.length === 0,
+      pendingStandIns.length === 0 &&
+      !solShort &&
+      !coinShort,
   );
+
+  // Every reason the launch can't go yet, in the order you'd fix them — shown on
+  // screen so a disabled button is never a mystery. Empty exactly when the
+  // button is live (balances aside, which only ever add a reason).
+  const blockers: string[] = [];
+  if (!publicKey) blockers.push("Connect a wallet to launch.");
+  else if (!config || !coinConfig) blockers.push("Loading protocol settings — one moment.");
+  if (!name) blockers.push("Give the basket a name.");
+  if (!symbol) blockers.push("Give the basket a symbol (its ticker).");
+  if (!countOk) blockers.push(`Pick ${MIN_ASSETS}–${MAX_ASSETS} tokens — you have ${assets.length}.`);
+  if (pendingStandIns.length > 0)
+    blockers.push(
+      `Create the stand-in test ${pendingStandIns.length === 1 ? "token" : "tokens"} first (${pendingStandIns.length} pending).`,
+    );
+  if (countOk && !amountsOk)
+    blockers.push(
+      canUseBudget
+        ? "Raise the budget so every token gets a non-zero deposit."
+        : "Enter a deposit amount for every token.",
+    );
+  if (solShort)
+    blockers.push(
+      `Not enough SOL — launching costs about ${formatTokens(solCost, 9, 4)} SOL and you have ${formatTokens(balances.sol!, 9, 4)}.`,
+    );
+  if (coinShort && coinConfig)
+    blockers.push(
+      `Not enough $TOTE — the launch fee is ${formatTokens(coinConfig.creationFeeCoin, COIN_DECIMALS)} TOTE (burned at creation) and you have ${formatTokens(balances.coin!, COIN_DECIMALS)}.`,
+    );
+  if (countOk && !acknowledged) blockers.push("Tick the box to confirm you've read the terms.");
 
 
   /**
-   * Creates a devnet mint for each real token picked, in one transaction, and
-   * swaps the placeholder entries for the mints that now exist. The mapping is
-   * persisted so a basket page opened later can still price these.
+   * Sends one transaction per mint. Each mint is five instructions, and three
+   * of them won't fit a single transaction (the 1232-byte limit), so they can't
+   * be bundled. Signed in a single wallet prompt where the wallet supports it,
+   * otherwise one prompt per mint. Returns how many landed, in order, so a
+   * partial failure only commits the mints that actually went through.
+   */
+  async function sendMintGroups(
+    groups: TransactionInstruction[][],
+    mints: Keypair[],
+  ): Promise<number> {
+    if (!publicKey) {
+      setError("connect a wallet first");
+      return 0;
+    }
+    let landed = 0;
+    try {
+      if (signAllTransactions) {
+        const { blockhash } = await connection.getLatestBlockhash("finalized");
+        const txs = groups.map((ixs, i) => {
+          const tx = new Transaction().add(...ixs);
+          tx.feePayer = publicKey;
+          tx.recentBlockhash = blockhash;
+          tx.partialSign(mints[i]); // the new mint account signs its own creation
+          return tx;
+        });
+        const signed = await signAllTransactions(txs);
+        for (const tx of signed) {
+          const sig = await connection.sendRawTransaction(tx.serialize());
+          await connection.confirmTransaction(sig, "confirmed");
+          landed++;
+        }
+      } else {
+        // No batch signing: fall back to the single-tx path, one prompt each.
+        for (let i = 0; i < groups.length; i++) {
+          const sig = await send(groups[i], [mints[i]]);
+          if (!sig) break;
+          landed++;
+        }
+      }
+    } catch (e) {
+      setError(describeError(e));
+    }
+    return landed;
+  }
+
+  /**
+   * Creates a devnet mint for each real token picked — one transaction each —
+   * and swaps the placeholder entries for the mints that now exist. The mapping
+   * is persisted so a basket page opened later can still price these.
    */
   async function createStandIns() {
     if (!publicKey) return setError("connect a wallet first");
@@ -406,18 +535,18 @@ export default function NewBasketPage() {
         name: a.pendingStandIn!.name,
         decimals: a.decimals,
       }));
-      const { instructions, mints } = await createStandInMints(
-        connection,
-        publicKey,
-        publicKey,
-        specs,
-      );
-      const sig = await send(instructions, mints);
-      if (!sig) return;
+      const { groups, mints } = await createStandInMints(connection, publicKey, publicKey, specs);
+      const landed = await sendMintGroups(groups, mints);
+      if (landed === 0) return;
+
+      // Only the mints that actually landed are swapped in; any that didn't stay
+      // pending, so the button reappears and finishes the rest on a retry.
+      const created = pendingStandIns.slice(0, landed);
+      const createdMints = mints.slice(0, landed);
 
       recordStandIns(
-        pendingStandIns.map((a, i) => ({
-          standIn: mints[i].publicKey.toBase58(),
+        created.map((a, i) => ({
+          standIn: createdMints[i].publicKey.toBase58(),
           mainnet: a.pendingStandIn!.mainnet.toBase58(),
           symbol: a.symbol,
           name: a.pendingStandIn!.name,
@@ -426,7 +555,7 @@ export default function NewBasketPage() {
       );
 
       const replacement = new Map(
-        pendingStandIns.map((a, i) => [a.address.toBase58(), mints[i].publicKey]),
+        created.map((a, i) => [a.address.toBase58(), createdMints[i].publicKey]),
       );
       setAssets((prev) =>
         prev.map((a) => {
@@ -451,13 +580,13 @@ export default function NewBasketPage() {
     setMinting(true);
     setError(null);
     try {
-      const { instructions, mints } = await createAndFundTestMints(connection, publicKey, publicKey, 3);
-      const sig = await send(instructions, mints);
-      if (sig) {
+      const { groups, mints } = await createAndFundTestMints(connection, publicKey, publicKey, 3);
+      const landed = await sendMintGroups(groups, mints);
+      if (landed > 0) {
         // They're in the wallet now, so they show up in the picker — and
         // preselect them, since minting them is a clear signal of intent.
         const options = await loadTokens();
-        const minted = new Set(mints.map((m) => m.publicKey.toBase58()));
+        const minted = new Set(mints.slice(0, landed).map((m) => m.publicKey.toBase58()));
         for (const option of options.filter((o) => minted.has(o.mint.toBase58()))) {
           await addAsset(option);
         }
@@ -1015,6 +1144,17 @@ export default function NewBasketPage() {
             <a className="underline" href={explorerTxUrl(done.signature)} target="_blank" rel="noreferrer">
               View transaction
             </a>
+          </Banner>
+        )}
+
+        {blockers.length > 0 && step === null && !done && (name || symbol || assets.length > 0) && (
+          <Banner kind="warn">
+            <div className="font-medium">Before you can launch:</div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {blockers.map((b, i) => (
+                <li key={i}>{b}</li>
+              ))}
+            </ul>
           </Banner>
         )}
 

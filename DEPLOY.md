@@ -41,6 +41,23 @@ for ongoing testing.
    tokens" helper (devnet has no real tokens).
 4. **Seed → Mint → Redeem** via the on-chain forms.
 
+## Fund a tester with $TOTE (so they can create a basket)
+Creating a basket burns a $TOTE launch fee (currently 300,000 TOTE) from the
+manager's wallet, and a fresh devnet wallet holds none — the app now says
+"Not enough $TOTE" and blocks the launch. $TOTE's mint authority was revoked at
+genesis, so you can't mint more; you **transfer** from the genesis holder (the
+admin wallet). A tester sends you their wallet address, then from `app/`:
+```bash
+npx tsx scripts/airdrop-tote-devnet.mts --to <their-wallet-pubkey>
+```
+This both transfers $TOTE (five launches' worth by default) **and** tops their
+devnet SOL up to 0.5 — enough to pay rent for the stand-in mints, the basket and
+its vaults — so they can finish the whole flow without airdropping anything
+themselves. SOL comes from the free cluster faucet, falling back to the admin
+wallet if the faucet is rate-limited. Flags: `--amount <whole TOTE>`,
+`--sol <target>` (or `--no-sol`), `--dry-run` to preview. Buying/redeeming
+existing baskets needs no $TOTE — only creating one does.
+
 ## Devnet caveats to tell testers
 - **"Buy/Sell with SOL"** can't quote on devnet (Jupiter is mainnet-only) — use
   the in-kind seed/mint/redeem forms instead.

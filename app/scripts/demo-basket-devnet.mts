@@ -70,15 +70,18 @@ async function main() {
   console.log(`manager: ${manager.publicKey.toBase58()}`);
   console.log(`basket will be #${config.basketCount}\n`);
 
-  // 1. Three test tokens to build the basket out of.
+  // 1. Three test tokens to build the basket out of. One transaction per mint:
+  //    five instructions each won't share a transaction (the 1232-byte limit).
   console.log("1/5  minting test tokens…");
-  const { instructions: mintIxs, mints } = await createAndFundTestMints(
+  const { groups: mintGroups, mints } = await createAndFundTestMints(
     connection,
     manager.publicKey,
     manager.publicKey,
     3,
   );
-  console.log(`     ${await send(mintIxs, mints)}`);
+  for (let i = 0; i < mintGroups.length; i++) {
+    console.log(`     ${await send(mintGroups[i], [mints[i]])}`);
+  }
   const assets = mints.map((m) => m.publicKey);
   assets.forEach((a) => console.log(`     ${a.toBase58()}`));
 
