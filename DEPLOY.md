@@ -41,7 +41,31 @@ for ongoing testing.
    tokens" helper (devnet has no real tokens).
 4. **Seed → Mint → Redeem** via the on-chain forms.
 
-## Fund a tester with $TOTE (so they can create a basket)
+## Self-serve faucet (testers fund themselves, you don't have to be online)
+The create-basket page shows a devnet-only "Get test SOL + $TOTE" button that
+tops a tester's wallet up to a target (0.5 SOL, five launches' worth of $TOTE)
+via a server route (`app/src/app/api/faucet/route.ts`). It's **balance-gated**:
+it only sends the shortfall up to the target, so repeated clicks can't stack
+past it — no database, the cap resets as they spend.
+
+The route signs with a **dedicated faucet wallet** (`keys/devnet-faucet.json`),
+never the admin key, so a leak only risks the faucet's balance. Two setup steps:
+
+1. **Fund the faucet wallet** (from `app/`, with the admin key):
+   ```bash
+   npx tsx scripts/airdrop-tote-devnet.mts --to <faucet-pubkey> --amount 50000000 --sol 5
+   ```
+   Refill the same way whenever it runs low (the button tells testers when it is).
+2. **Set `FAUCET_SECRET` in Vercel** (Project → Settings → Environment Variables,
+   Production) to the **contents of `keys/devnet-faucet.json`** — the JSON number
+   array. It's a server-only var (no `NEXT_PUBLIC_`), so it never reaches the
+   browser. Redeploy once after adding it so the function picks it up.
+
+If `FAUCET_SECRET` is unset the button returns "Faucet isn't configured"; if the
+wallet runs dry it returns "ping the admin to refill". The route refuses on any
+non-devnet RPC.
+
+## Fund a tester with $TOTE manually (if you prefer, or the faucet is down)
 Creating a basket burns a $TOTE launch fee (currently 300,000 TOTE) from the
 manager's wallet, and a fresh devnet wallet holds none — the app now says
 "Not enough $TOTE" and blocks the launch. $TOTE's mint authority was revoked at

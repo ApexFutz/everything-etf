@@ -119,6 +119,12 @@ export default function NewBasketPage() {
     sol: null,
     coin: null,
   });
+  /** Bumped after a faucet top-up so the balance gate re-reads immediately. */
+  const [balanceNonce, setBalanceNonce] = useState(0);
+  const [faucetBusy, setFaucetBusy] = useState(false);
+  const [faucetNote, setFaucetNote] = useState<{ kind: "success" | "error"; text: string } | null>(
+    null,
+  );
 
   /**
    * Gates the launch button. Nothing here should be a surprise after the fact,
@@ -292,7 +298,7 @@ export default function NewBasketPage() {
     return () => {
       cancelled = true;
     };
-  }, [connection, publicKey, coinConfig, done, minting, creatingStandIns]);
+  }, [connection, publicKey, coinConfig, done, minting, creatingStandIns, balanceNonce]);
 
   // Prices for whatever is currently selected. Devnet test mints have none,
   // which is the case the manual fallback below exists for.
@@ -521,6 +527,45 @@ export default function NewBasketPage() {
   }
 
   /**
+   * Asks the server faucet to top the connected wallet up to its test SOL and
+   * $TOTE targets, then re-reads the balance gate. No wallet signature: the
+   * faucet signs and pays. Devnet only (the button that calls this is hidden
+   * elsewhere).
+   */
+  async function getTestFunds() {
+    if (!publicKey) return setError("connect a wallet first");
+    setFaucetBusy(true);
+    setFaucetNote(null);
+    try {
+      const res = await fetch("/api/faucet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipient: publicKey.toBase58() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setFaucetNote({ kind: "error", text: data.error ?? "Faucet request failed." });
+        return;
+      }
+      setFaucetNote({
+        kind: "success",
+        text:
+          data.message ??
+          (data.funded?.sol && data.funded?.tote
+            ? "Sent test SOL and $TOTE — you're ready to launch."
+            : data.funded?.tote
+              ? "Sent test $TOTE."
+              : "Sent test SOL."),
+      });
+      setBalanceNonce((n) => n + 1);
+    } catch (e) {
+      setFaucetNote({ kind: "error", text: e instanceof Error ? e.message : "Faucet request failed." });
+    } finally {
+      setFaucetBusy(false);
+    }
+  }
+
+  /**
    * Creates a devnet mint for each real token picked — one transaction each —
    * and swaps the placeholder entries for the mints that now exist. The mapping
    * is persisted so a basket page opened later can still price these.
@@ -698,6 +743,24 @@ export default function NewBasketPage() {
           share of what it holds.
         </p>
       </div>
+
+      {IS_DEVNET && (
+        <Card className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">Testing on devnet?</h2>
+              <p className="mt-1 text-sm text-muted">
+                Grab free test SOL and $TOTE — enough to create a basket front-to-back. No real value;
+                devnet only.
+              </p>
+            </div>
+            <Button type="button" onClick={getTestFunds} disabled={!publicKey || faucetBusy}>
+              {faucetBusy ? "Sending…" : !publicKey ? "Connect a wallet" : "Get test SOL + $TOTE"}
+            </Button>
+          </div>
+          {faucetNote && <Banner kind={faucetNote.kind}>{faucetNote.text}</Banner>}
+        </Card>
+      )}
 
       <form onSubmit={onSubmit} className="space-y-5">
         <Card>
