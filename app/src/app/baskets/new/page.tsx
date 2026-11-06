@@ -188,7 +188,7 @@ export default function NewBasketPage() {
    * which the program rejects outright. Better to say so now than to let the
    * launch transaction revert at the end.
    */
-  async function addAsset(token: TokenOption) {
+  async function addAsset(token: TokenOption, opts?: { allowMissingStandIn?: boolean }) {
     setAssetError(null);
     const key = token.mint.toBase58();
     if (assets.some((a) => a.address.toBase58() === key)) return;
@@ -197,8 +197,9 @@ export default function NewBasketPage() {
     if ("error" in result) {
       // In demo mode a token that simply isn't on this cluster is fine — a
       // stand-in gets created for it. Every other rejection still stands,
-      // because the program would reject it on mainnet too.
-      if (!(demoMode && IS_DEVNET && result.missing)) {
+      // because the program would reject it on mainnet too. `opts` lets the
+      // discover hand-off force this before the demoMode toggle has settled.
+      if (!((demoMode || opts?.allowMissingStandIn) && IS_DEVNET && result.missing)) {
         setAssetError(`${token.symbol || key.slice(0, 8)}: ${result.error}`);
         return;
       }
@@ -242,6 +243,79 @@ export default function NewBasketPage() {
     setSelectedTokens((prev) => prev.filter((t) => t.mint.toBase58() !== key));
     setWeights((prev) => (idx === -1 ? prev : normalize(prev.filter((_, i) => i !== idx))));
   }
+
+  /**
+   * Pre-fill from the Discover flow. The candidate is handed over in
+   * sessionStorage (weights don't belong in a URL) under `?from=discover`. Each
+   * token goes through the normal eligibility path — forcing the stand-in route
+   * on devnet, since the demoMode toggle hasn't settled yet — then the generated
+   * split, name and symbol are applied. Runs once, on mount.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("from") !== "discover") return;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem("tote:discover");
+      sessionStorage.removeItem("tote:discover");
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    let candidate: {
+      name?: string;
+      symbol?: string;
+      weights?: number[];
+      tokens?: {
+        mint: string;
+        symbol: string;
+        name: string;
+        decimals: number;
+        icon?: string;
+        verified?: boolean;
+        scoreLabel?: string;
+        liquidityUsd?: number;
+      }[];
+    };
+    try {
+      candidate = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const tokens = candidate.tokens ?? [];
+    if (tokens.length === 0) return;
+    (async () => {
+      if (IS_DEVNET) setDemoMode(true);
+      for (const t of tokens) {
+        let mint: PublicKey;
+        try {
+          mint = new PublicKey(t.mint);
+        } catch {
+          continue;
+        }
+        await addAsset(
+          {
+            mint,
+            symbol: t.symbol,
+            name: t.name,
+            decimals: t.decimals,
+            owned: false,
+            icon: t.icon,
+            verified: t.verified,
+            scoreLabel: t.scoreLabel,
+            liquidityUsd: t.liquidityUsd,
+          },
+          { allowMissingStandIn: true },
+        );
+      }
+      const w = candidate.weights;
+      if (Array.isArray(w)) setWeights((prev) => (prev.length === w.length ? normalize(w) : prev));
+      if (candidate.name) setName(candidate.name);
+      if (candidate.symbol) setSymbol(candidate.symbol);
+    })();
+    // One-shot pre-fill; addAsset is stable enough and intentionally excluded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
